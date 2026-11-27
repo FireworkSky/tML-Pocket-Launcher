@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#101712">
+    <meta name="description" content="Run tModLoader on Android with tML Pocket Launcher. Find installation instructions, downloads and project updates.">
+    <title>tML Pocket Launcher · Android launcher</title>
+    <link rel="icon" href="./assets/launcher-icon.png" type="image/png">
+    <link rel="stylesheet" href="./styles.css">
+    <link rel="alternate" hreflang="zh-CN" href="./index.html">
+    <link rel="alternate" hreflang="en" href="./en.html">
+    <script defer src="./language.js"></script>
+</head>
+<body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="site-header">
+        <div class="wrap header-inner">
+            <a class="wordmark" href="./en.html">
+                <img src="./assets/launcher-icon.png" width="38" height="38" alt="">
+                <span>tML Pocket Launcher</span>
+            </a>
+            <nav aria-label="Main navigation">
+                <a href="#install">Install</a>
+                <a href="#news">Updates</a>
+                <a class="repo-link" href="https://github.com/FireworkSky/tML-Pocket-Launcher">GitHub <span aria-hidden="true">↗</span></a>
+                <a class="language-link" href="./index.html" hreflang="zh-CN" lang="zh-CN">简体中文</a>
+            </nav>
+        </div>
+    </header>
+
+    <main id="main" tabindex="-1">
+        <section class="hero" aria-labelledby="hero-title">
+            <div class="wrap hero-layout">
+                <div class="hero-copy">
+                    <h1 id="hero-title"><span>tModLoader</span><br><em>in your pocket.</em></h1>
+                    <p>Play modded Terraria on Android. Import your copy of the game, add your mods and arrange the touch controls to suit the way you play.</p>
+                    <div class="hero-actions">
+                        <!-- download:start -->
+                        <a class="button primary" href="#install">Installation options <span aria-hidden="true">↓</span></a>
+                        <!-- download:end -->
+                        <a class="button secondary" href="#news">Updates</a>
+                    </div>
+                    <p class="platform"><span aria-hidden="true"></span> Android 9+ <b>·</b> ARM64 <b>·</b> In development</p>
+                </div>
+                <figure class="preview">
+                    <a class="preview-frame" href="./assets/launcher-preview.webp" aria-label="Enlarge the launcher screenshot">
+                        <img src="./assets/launcher-preview.webp" width="1440" height="648" alt="Launcher home screen in Chinese showing game files, tModLoader status, mod management and the play button">
+                    </a>
+                    <figcaption><a href="./assets/launcher-preview.webp">View full-size screenshot <span aria-hidden="true">↗</span></a></figcaption>
+                </figure>
+            </div>
+        </section>
+
+        <section class="wrap features" aria-label="Launcher features">
+            <article>
+                <h2>Import your game</h2>
+                <p>Use a Steam ZIP archive, a GOG Linux installer or files from a copy of Terraria PE installed on your device.</p>
+            </article>
+            <article>
+                <h2>Manage versions and mods</h2>
+                <p>Keep several tModLoader versions side by side, import .tmod files, check dependencies and save mod presets.</p>
+            </article>
+            <article>
+                <h2>Customize touch controls</h2>
+                <p>Play with dual joysticks and touch menus. Move the controls in the layout editor to keep them within reach.</p>
+            </article>
+        </section>
+
+        <section class="news" id="news" aria-labelledby="news-title">
+            <div class="wrap">
+                <div class="section-heading">
+                    <h2 id="news-title">Updates</h2>
+                    <a class="text-link" href="https://github.com/FireworkSky/tML-Pocket-Launcher/releases">All releases <span aria-hidden="true">↗</span></a>
+                </div>
+                <div class="news-list">
+                    <!-- releases:start -->
+                    <!-- releases:end -->
+                    <article class="news-item">
+                        <div class="news-meta">
+                            <time datetime="2026-11-24">Nov 24, 2026</time>
+                            <span>Development update</span>
+                        </div>
+                        <div>
+                            <h3>In-game language switching restored</h3>
+                            <p>This update fixes in-game language switching and checks the conversion profile before converting Terraria PE resources.</p>
+                            <a class="text-link" href="https://github.com/FireworkSky/tML-Pocket-Launcher/commit/cf5c22c15b4f95f45d3a0490fa7c24f59deae835">View commit <span aria-hidden="true">↗</span></a>
+                        </div>
+                    </article>
+                    <article class="news-item">
+                        <div class="news-meta">
+                            <time datetime="2026-11-23">Nov 23, 2026</time>
+                            <span>Development update</span>
+                        </div>
+                        <div>
+                            <h3>The launcher now supports English and Simplified Chinese</h3>
+                            <p>You can now switch the launcher interface between English and Simplified Chinese. Support for importing compatible resources from an installed copy of Terraria PE also landed that day.</p>
+                            <a class="text-link" href="https://github.com/FireworkSky/tML-Pocket-Launcher/commit/7daa626">View language update <span aria-hidden="true">↗</span></a>
+                            <a class="text-link" href="https://github.com/FireworkSky/tML-Pocket-Launcher/blob/main/docs/terraria-pe.md">Terraria PE guide (Chinese) <span aria-hidden="true">↗</span></a>
+                        </div>
+                    </article>
+                </div>
+            </div>
+        </section>
+
+        <section class="wrap install" id="install" aria-labelledby="install-title">
+            <div class="install-copy">
+                <h2 id="install-title">Install the launcher</h2>
+                <p>You’ll need an ARM64 device running Android 9 or later and game files from your own copy of Terraria.</p>
+            </div>
+            <div class="install-actions">
+                <!-- install:start -->
+                <p>There’s no public APK yet. You can build the launcher from source.</p>
+                <a class="button primary" href="https://github.com/FireworkSky/tML-Pocket-Launcher/blob/main/README.en.md#build">Build from source <span aria-hidden="true">↗</span></a>
+                <!-- install:end -->
+                <a class="text-link" href="https://github.com/FireworkSky/tML-Pocket-Launcher/blob/main/README.en.md#quick-start">Quick start <span aria-hidden="true">↗</span></a>
+            </div>
+        </section>
+    </main>
+
+    <footer class="site-footer">
+        <div class="wrap footer-inner">
+            <div>
+                <a class="wordmark" href="./en.html">
+                    <img src="./assets/launcher-icon.png" width="32" height="32" alt="">
+                    <span>tML Pocket Launcher</span>
+                </a>
+                <p>An independent community project licensed under GPL-3.0-only.</p>
+            </div>
+            <nav aria-label="Footer navigation">
+                <a href="https://github.com/FireworkSky/tML-Pocket-Launcher/issues">Report an issue <span aria-hidden="true">↗</span></a>
+                <a href="https://github.com/FireworkSky/tML-Pocket-Launcher/blob/main/LICENSE">License <span aria-hidden="true">↗</span></a>
+            </nav>
+        </div>
+    </footer>
+</body>
+</html>
