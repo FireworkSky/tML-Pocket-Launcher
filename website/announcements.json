@@ -1,0 +1,76 @@
+{
+  "zh-CN": [
+    {
+      "date": "2026-11-27",
+      "category": "开发进展",
+      "title": "启动器首页接入官网公告",
+      "body": "新版启动器会同步官网的更新公告。展开首页的「更新公告」即可阅读，离线时可查看上次同步的内容。官网已预留 APK 下载入口，当前暂未开放。",
+      "links": []
+    },
+    {
+      "date": "2026-11-24",
+      "category": "开发进展",
+      "title": "恢复游戏内语言切换",
+      "body": "修复游戏内语言切换，并为 Terraria PE 资源转换增加配置校验。",
+      "links": [
+        {
+          "label": "查看提交",
+          "url": "https://github.com/FireworkSky/tML-Pocket-Launcher/commit/cf5c22c15b4f95f45d3a0490fa7c24f59deae835"
+        }
+      ]
+    },
+    {
+      "date": "2026-11-23",
+      "category": "开发进展",
+      "title": "启动器支持简体中文和英文",
+      "body": "新增启动器界面的简体中文和英文选项。同日加入 Terraria PE 资源转换支持，可从设备上已安装的游戏导入兼容资源。",
+      "links": [
+        {
+          "label": "查看语言更新",
+          "url": "https://github.com/FireworkSky/tML-Pocket-Launcher/commit/7daa626"
+        },
+        {
+          "label": "Terraria PE 支持说明",
+          "url": "https://github.com/FireworkSky/tML-Pocket-Launcher/blob/main/docs/terraria-pe.md"
+        }
+      ]
+    }
+  ],
+  "en": [
+    {
+      "date": "2026-11-27",
+      "category": "Development update",
+      "title": "Website updates on the launcher home screen",
+      "body": "The updated launcher shows the same announcements as the website. Expand Updates on the home screen to read them, including previously synced updates while offline. The website has a download section; the APK is not available yet.",
+      "links": []
+    },
+    {
+      "date": "2026-11-24",
+      "category": "Development update",
+      "title": "In-game language switching restored",
+      "body": "This update fixes in-game language switching and checks the conversion profile before converting Terraria PE resources.",
+      "links": [
+        {
+          "label": "View commit",
+          "url": "https://github.com/FireworkSky/tML-Pocket-Launcher/commit/cf5c22c15b4f95f45d3a0490fa7c24f59deae835"
+        }
+      ]
+    },
+    {
+      "date": "2026-11-23",
+      "category": "Development update",
+      "title": "The launcher now supports English and Simplified Chinese",
+      "body": "You can now switch the launcher interface between English and Simplified Chinese. Support for importing compatible resources from an installed copy of Terraria PE also landed that day.",
+      "links": [
+        {
+          "label": "View language update",
+          "url": "https://github.com/FireworkSky/tML-Pocket-Launcher/commit/7daa626"
+        },
+        {
+          "label": "Terraria PE guide (Chinese)",
+          "url": "https://github.com/FireworkSky/tML-Pocket-Launcher/blob/main/docs/terraria-pe.md"
+        }
+      ]
+    }
+  ]
+}

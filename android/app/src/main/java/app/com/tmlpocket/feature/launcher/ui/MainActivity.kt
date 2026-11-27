@@ -293,6 +293,14 @@ class MainActivity : Activity() {
                             request: WebResourceRequest,
                         ): WebResourceResponse? {
                             if (request.url.toString().startsWith("data:image/")) return null
+                            val uri = request.url
+                            if (!request.isForMainFrame && request.method == "GET" &&
+                                uri.scheme == "https" && uri.encodedAuthority == "fireworksky.github.io" &&
+                                uri.encodedPath in setOf(
+                                    "/tML-Pocket-Launcher/news-zh-CN.json",
+                                    "/tML-Pocket-Launcher/news-en.json",
+                                )
+                            ) return null
                             if (!request.isForMainFrame && request.method == "GET" &&
                                 SteamWorkshopPreview.isAllowed(request.url.toString()))
                                 return SteamWorkshopPreview.load(request.url.toString())

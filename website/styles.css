@@ -197,6 +197,8 @@ nav a:hover, .text-link:hover { color: var(--text); text-decoration: underline; 
 }
 .install-actions .button { margin: 12px 12px 0 0; }
 .install-actions p { margin: 0; overflow-wrap: anywhere; }
+.pending-download { color: var(--muted); border-color: var(--line); cursor: default; }
+.install-actions .pending-download { margin: 0 0 10px; }
 .site-footer { border-top: 1px solid var(--line); }
 .footer-inner { padding-block: 26px; }
 .footer-inner p { margin-top: 10px; color: var(--muted); font-size: .82rem; line-height: 1.6; }

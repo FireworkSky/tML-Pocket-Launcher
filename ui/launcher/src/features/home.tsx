@@ -1,5 +1,6 @@
 import { useTranslation } from '../i18n';
 import { useState } from 'react';
+import { Announcements } from './announcements';
 import { Button, Icon, Badge } from '../components/ui';
 import { useGameActions } from './game-actions';
 import { needsUpdate, defaultFilters } from '../domain/mods';
@@ -102,6 +103,7 @@ export function HomePage() {
   ];
   return (
     <>
+      <Announcements />
       <div className="home-workspace">
         <section className="panel game-overview setup-panel" aria-label={t('tModLoader 游戏状态')}>
           <div className="workspace-section">

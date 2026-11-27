@@ -1,0 +1,30 @@
+.launcher-news {
+  margin-bottom: 10px;
+}
+.launcher-news summary {
+  padding: 12px 16px;
+  cursor: pointer;
+  color: var(--strong);
+}
+.launcher-news summary span {
+  margin-inline-start: 10px;
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+}
+.launcher-news-body {
+  padding: 0 16px 12px;
+  overflow-wrap: anywhere;
+}
+.launcher-news-body article {
+  border-top: 1px solid var(--line);
+  padding-block: 12px;
+}
+.launcher-news-body h3,
+.launcher-news-body p {
+  margin: 5px 0;
+}
+.launcher-news-body a {
+  display: inline-block;
+  padding: 5px 14px 5px 0;
+  color: var(--blue);
+}

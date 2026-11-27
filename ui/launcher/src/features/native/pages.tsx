@@ -2,6 +2,7 @@ import { Badge, Button, EmptyState, Icon, Switch, WorkspaceTabs } from '../../co
 import { useTranslation } from '../../i18n';
 import { useWorkspaceActions, tools } from '../home';
 import { nativeRequest } from '../../native/bridge';
+import { Announcements } from '../announcements';
 import { useLauncher } from '../../state/launcher';
 
 export function NativeHomePage() {
@@ -44,6 +45,7 @@ export function NativeHomePage() {
   ];
   return (
     <>
+      <Announcements />
       <div className="home-workspace">
         <section className="panel game-overview setup-panel" aria-label={t('tModLoader 游戏状态')}>
           <div className="workspace-section">

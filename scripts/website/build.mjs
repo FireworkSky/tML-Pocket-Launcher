@@ -24,27 +24,42 @@ function releaseUrl(release) {
 
 const editions = [
     {
-        file: 'index.html', stable: '正式版', preview: '预览版', notes: '查看发行说明',
+        locale: 'zh-CN', file: 'index.html', stable: '正式版', preview: '预览版', notes: '查看发行说明',
         download: '下载 APK', choose: '选择 APK', date: iso => iso.replaceAll('-', '.'),
     },
     {
-        file: 'en.html', stable: 'Stable release', preview: 'Prerelease', notes: 'Release notes',
+        locale: 'en', file: 'en.html', stable: 'Stable release', preview: 'Prerelease', notes: 'Release notes',
         download: 'Download APK', choose: 'Choose an APK',
         date: iso => new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(iso)),
     },
 ];
 
-function renderRelease(release, edition) {
-    const date = dateFormat.format(new Date(release.published_at));
+function releaseAnnouncement(release, edition) {
+    return {
+        date: dateFormat.format(new Date(release.published_at)),
+        category: release.prerelease ? edition.preview : edition.stable,
+        title: release.name?.trim() || release.tag_name,
+        body: '',
+        links: [{ label: edition.notes, url: releaseUrl(release) }],
+    };
+}
+
+function renderAnnouncement(item, edition) {
+    const links = item.links.map(({ label, url }) => {
+        if (new URL(url).protocol !== 'https:') throw new Error('Announcement links must use HTTPS');
+        return `<a class="text-link" href="${escapeHtml(url)}">${escapeHtml(label)} <span aria-hidden="true">↗</span></a>`;
+    });
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(item.date)) throw new Error('Invalid announcement date');
     return `
                     <article class="news-item">
                         <div class="news-meta">
-                            <time datetime="${date}">${edition.date(date)}</time>
-                            <span>${release.prerelease ? edition.preview : edition.stable}</span>
+                            <time datetime="${item.date}">${edition.date(item.date)}</time>
+                            <span>${escapeHtml(item.category)}</span>
                         </div>
                         <div>
-                            <h3>${escapeHtml(release.name?.trim() || release.tag_name)}</h3>
-                            <a class="text-link" href="${releaseUrl(release)}">${edition.notes} <span aria-hidden="true">↗</span></a>
+                            <h3>${escapeHtml(item.title)}</h3>
+                            ${item.body ? `<p>${escapeHtml(item.body)}</p>` : ''}
+                            ${links.join(' ')}
                         </div>
                     </article>`;
 }
@@ -93,9 +108,12 @@ await mkdir(output, { recursive: true });
 await cp(new URL('assets/', site), resolve(output, 'assets'), { recursive: true });
 await copyFile(new URL('styles.css', site), resolve(output, 'styles.css'));
 await copyFile(new URL('language.js', site), resolve(output, 'language.js'));
+const editorial = JSON.parse(await readFile(new URL('announcements.json', site), 'utf8'));
 for (const edition of editions) {
     const template = await readFile(new URL(edition.file, site), 'utf8');
-    const news = releases.slice(0, 8).map(release => renderRelease(release, edition)).join('');
-    const html = replaceSection(template, 'releases', news);
+    const items = [...releases.slice(0, 8).map(release => releaseAnnouncement(release, edition)), ...editorial[edition.locale]]
+        .sort((a, b) => b.date.localeCompare(a.date));
+    const html = replaceSection(template, 'announcements', items.map(item => renderAnnouncement(item, edition)).join(''));
+    await writeFile(resolve(output, `news-${edition.locale}.json`), JSON.stringify(items));
     await writeFile(resolve(output, edition.file), preferred ? addDownload(html, edition) : html);
 }
