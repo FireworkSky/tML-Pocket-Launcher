@@ -355,8 +355,6 @@ function MobileTerrariaInspection() {
         <p>{t('安装包缺少受支持的 Unity 资源容器。')}</p>
       ) : !result.targetTml ? (
         <p>{t('此 APK 未包含 Terraria PE 转换配置。')}</p>
-      ) : nativeState?.tml !== result.targetTml ? (
-        <p>{t('请先安装并选择 tModLoader {version}。', { version: result.targetTml })}</p>
       ) : converting ? (
         <>
           <p role="status">{conversionStatus}</p>
@@ -381,7 +379,7 @@ function MobileTerrariaInspection() {
       ) : (
         <Button
           variant="primary"
-          disabled={nativeState.busy}
+          disabled={!nativeState || nativeState.busy}
           onClick={() => {
             setCancelling(false);
             setConversionError('');

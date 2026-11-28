@@ -30,23 +30,6 @@ class GamePackageInstaller(private val filesDir: File) {
     private val journalFile
         get() = File(filesDir, ".package-install-transaction.json")
 
-    internal fun installDefaultTml(
-        cancelled: () -> Boolean,
-        progress: (String, Int) -> Unit,
-        downloadArchive: () -> File,
-    ) = synchronized(installLock) {
-        val state = readState()
-        // An empty catalog is retained after an explicit uninstall.
-        if (state.has(TmlVersionCatalog.VERSIONS) || state.has(PackageKind.TMODLOADER.name)) return@synchronized
-        checkCancelled(cancelled)
-        val archive = downloadArchive()
-        try {
-            importPackage(PackageKind.TMODLOADER, archive, cancelled = cancelled, progress = progress)
-        } finally {
-            archive.delete()
-        }
-    }
-
     fun importPackage(
         kind: PackageKind,
         archive: File,
@@ -407,16 +390,6 @@ class GamePackageInstaller(private val filesDir: File) {
             }.getOrNull()
         }
 
-    internal fun mobileTerrariaTmlContent(versionId: String?, target: String): File = synchronized(installLock) {
-        val layout = runCatching {
-            val state = readState()
-            if (versionId == null) installedLayout(PackageKind.TMODLOADER, state)
-            else versionLayout(versionId, TmlVersionCatalog(state).requireRecord(versionId))
-        }.getOrNull()
-        check(layout != null && layout.version == target) { "Terraria PE 转换需要选择 tModLoader $target" }
-        layout.content
-    }
-
     fun terrariaSource(): TerrariaSource? =
         synchronized(installLock) {
             runCatching {
@@ -460,7 +433,8 @@ class GamePackageInstaller(private val filesDir: File) {
         }.toMap()
 
     private fun compatibleTml(state: JSONObject, version: String): Boolean =
-        sourceFrom(state) != TerrariaSource.ANDROID || mobileRecord(state)?.optString("targetTml") == version
+        sourceFrom(state) != TerrariaSource.ANDROID ||
+            mobileRecord(state)?.optString("targetTml")?.removePrefix("v") == version.removePrefix("v")
 
     internal fun mobileTerrariaIsCurrent(fingerprint: String, targetTml: String): Boolean =
         synchronized(installLock) {

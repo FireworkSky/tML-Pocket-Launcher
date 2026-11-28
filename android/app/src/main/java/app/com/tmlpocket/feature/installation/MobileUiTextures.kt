@@ -1,7 +1,6 @@
 package app.com.tmlpocket.feature.installation
 
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -24,17 +23,12 @@ internal object MobileUiTextures {
     private val gold = Color.rgb(255, 200, 101)
     private val white = Color.rgb(231, 241, 244)
 
-    fun write(tmlSprites: Map<String, ByteArray>, output: File, textures: Map<String, Pair<Int, Int>>) {
+    fun write(output: File, textures: Map<String, Pair<Int, Int>>) {
         if (textures.isEmpty()) return
         val sprites = mutableMapOf<String, Bitmap>()
         try {
             fun sprite(name: String): Bitmap = sprites.getOrPut(name) {
-                if (name.startsWith("tml/")) {
-                    val bytes = tmlSprites.getValue(name.removePrefix("tml/"))
-                    checkNotNull(BitmapFactory.decodeByteArray(bytes, 0, bytes.size))
-                } else {
-                    readMobileSprite(File(output, "mobile-controls/$name.rawimg"))
-                }
+                readMobileSprite(File(output, "mobile-controls/$name.rawimg"))
             }
             for ((path, size) in textures) {
                 val (width, height) = size
@@ -103,17 +97,18 @@ internal object MobileUiTextures {
                 biome(width / 2, true)
             }
             "Bestiary/Button_Back", "Bestiary/Button_Forward" ->
-                sprite("tml/ButtonCollapsed", 0f, 0f, width, height, flip = name.endsWith("Forward"))
+                glyph(if (name.endsWith("Forward")) "right" else "left", 0f, 0f, width, height, white)
             "Bestiary/Button_Border", "Bestiary/Button_Search_Border", "Bestiary/Button_Wide_Border",
             "Bestiary/Slot_Selection", "Creative/Journey_Toggle_MouseOver" -> frame(1f, 1f, width - 2, height - 2, gold)
             "Bestiary/Button_Filtering", "Bestiary/Button_Sorting", "Bestiary/Button_Search" -> {
                 panel(slate, edge)
                 val icon = when {
-                    name.endsWith("Sorting") -> "tml/DropdownIcon"
+                    name.endsWith("Sorting") -> null
                     name.endsWith("Filtering") -> "MobileMenu/WorldGeneral"
                     else -> "MobileInventory/Search"
                 }
-                sprite(icon, 2f, 2f, min(width, height) - 4, height - 4)
+                if (icon == null) glyph("down", 2f, 2f, min(width, height) - 4, height - 4, white)
+                else sprite(icon, 2f, 2f, min(width, height) - 4, height - 4)
             }
             "Bestiary/Slot_Back" -> panel(ink, slate)
             "Bestiary/Slot_Front" -> frame(1f, 1f, width - 2, height - 2, edge)
@@ -185,7 +180,7 @@ internal object MobileUiTextures {
             "Workshop/InProgress" -> cells(1, 6) { index, x, y, w, h ->
                 spinner(index, x + w / 2, y + h / 2, min(w, h) * .36f)
             }
-            "Workshop/IssueButton" -> sprite("tml/ButtonError")
+            "Workshop/IssueButton" -> glyph("warning", 0f, 0f, width, height, gold)
             "Workshop/IssueButton_Outline" -> frame(2f, 2f, width - 4, height - 4, gold)
             "Workshop/ListBackground" -> panel(slate, edge)
             "Workshop/PublicityFriendsOnly" -> glyph("people", 0f, 0f, width, height, white)
@@ -276,6 +271,14 @@ internal object MobileUiTextures {
 
         fun glyph(name: String, x: Float, y: Float, w: Float, h: Float, color: Int) = normalized(x, y, w, h) {
             when (name) {
+                "left" -> shape(color, 16f, 3f, 6f, 12f, 16f, 21f)
+                "right" -> shape(color, 8f, 3f, 18f, 12f, 8f, 21f)
+                "down" -> shape(color, 3f, 8f, 21f, 8f, 12f, 18f)
+                "warning" -> {
+                    shape(color, 12f, 2f, 23f, 22f, 1f, 22f)
+                    round(11f, 8f, 2f, 7f, ink, 1f)
+                    dot(12f, 18f, 1.3f, ink)
+                }
                 "keyboard" -> {
                     round(2f, 5f, 20f, 14f, color, 2f)
                     for (row in 0..1) for (col in 0..3)

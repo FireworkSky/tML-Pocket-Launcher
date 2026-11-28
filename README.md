@@ -63,7 +63,7 @@ Steam 登录已获真机验证；**GOG 登录与完整付费资源传输尚未�
 - 可同时安装多个 tML 发行版，启动时使用所选版本。各版本共用 Terraria 资源、存档、模组和配置。
 - 下载支持取消与重试，暂不支持跨进程的断点续传。
 - 创意工坊下载支持匿名公开访问或复用已登录 Steam 会话；受 Steam 项目权限限制，下载能力尚待真机验证。
-- Terraria PE 转换器仅包含在启用了转换配置的 arm64 APK 中，并要求选择配置指定的 tML 版本。实测 14,468 项资源转换结果约 704 MiB，实际用量随游戏版本而变化。
+- Terraria PE 转换器仅包含在启用了转换配置的 arm64 APK 中。实测 14,468 项资源转换结果约 704 MiB，实际用量随游戏版本而变化。
 - 默认触控纹理由带转换器的启动器从本机 Terraria PE 提取。使用 Steam 或 GOG 资源启动时，也可以从本机安装的 Terraria PE 提取纹理。缺失的默认纹理会跳过绘制并记入日志。
 - GOG 分卷安装包暂不支持。
 - 120 FPS 默认关闭，实际帧率取决于设备。联机托管补丁自动加载，开房支持 tModLoader 2026.09.3.1。
@@ -130,7 +130,7 @@ Pop-Location
 .\scripts\checks\check-apk.ps1 -ApkPath android/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk
 ```
 
-Android Studio 和命令行的 Debug、Release 构建默认包含 Terraria PE 转换器。转换时从已安装的 tModLoader `2026.09.3.1` 读取贴图清单和 tModLoader UI。
+Android Studio 和命令行的 Debug、Release 构建默认包含 Terraria PE 转换器。转换使用内置贴图尺寸清单和本机 PE 资源。启动游戏时选择兼容的 tModLoader `2026.09.3.1`。
 
 真机启动、账号资源传输和触控游玩需在设备上验证。
 

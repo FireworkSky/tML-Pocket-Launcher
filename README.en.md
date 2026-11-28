@@ -62,7 +62,7 @@ Set-Location tML-Pocket-Launcher
 
 Use precompiled tML `2026.09.3.1` / Terraria `1.4.4.9` references for the bundled mod and patches. References are staged only in ignored local build output. The debug APK is written to `android/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk`.
 
-Android Studio and command-line Debug and Release builds include the Terraria PE converter. It reads the texture catalog and tModLoader UI from the installed tModLoader `2026.09.3.1`.
+Android Studio and command-line Debug and Release builds include the Terraria PE converter. Conversion uses the bundled texture dimensions and the locally installed PE assets. Select tModLoader `2026.09.3.1` to launch the game.
 
 For the browser preview, run `npm ci` and `npm run dev` in `ui/launcher`, then visit `http://127.0.0.1:8769/preview.html`. Use `npm run check` and `npm run build` to validate types and generate production assets. See [development](docs/development.md) and [Android behavior and limitations](docs/android-launcher.md).
 

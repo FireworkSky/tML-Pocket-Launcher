@@ -3,9 +3,7 @@ package app.com.tmlpocket.feature.installation
 import android.content.Context
 import android.content.pm.PackageInfo
 import android.os.Looper
-import android.util.Base64
 import app.com.tmlpocket.R
-import app.com.tmlpocket.feature.stores.StoreRuntime
 import java.io.DataOutputStream
 import java.io.File
 import java.io.IOException
@@ -69,7 +67,6 @@ internal object MobileTerrariaConverter {
         context: Context,
         destination: File,
         packageName: String,
-        tmlContent: File,
         progress: MobileTerrariaPackage.Progress,
     ): JSONObject {
         check(Looper.myLooper() != Looper.getMainLooper()) { "Run conversion on a worker thread" }
@@ -88,10 +85,7 @@ internal object MobileTerrariaConverter {
         val workspace = Files.createTempDirectory(parent.toPath(), ".conversion-").toFile()
         try {
             check(workspace.usableSpace >= 2L * 1024 * 1024 * 1024) { "本机转换需要至少 2 GiB 可用空间" }
-            val assembly = File(tmlContent.parentFile, "tModLoader.dll")
-            val resources = StoreRuntime.request(context, "tml.resources", JSONObject().put("assembly", assembly.absolutePath)) as JSONObject
-            fun read(name: String) = Base64.decode(resources.getString(name), Base64.DEFAULT)
-            val profileTextures = prepareInventory(context, read("layout"), workspace, tmlContent)
+            val profileTextures = prepareInventory(context, workspace)
             extractUnity(archives, workspace, listOf("data.unity3d", "resources.resource"), progress)
             val controlSprites = prepareControlRecipes(context, workspace)
             val staged = File(workspace, "result")
@@ -103,8 +97,7 @@ internal object MobileTerrariaConverter {
                 controlSprites, report.getInt("control_sprites"),
             )
             report.put("drawn_control_sprites", JSONArray(drawnSprites))
-            val tmlSprites = listOf("ButtonCollapsed", "DropdownIcon", "ButtonError").associateWith(::read)
-            MobileUiTextures.write(tmlSprites, staged, profileTextures.generated)
+            MobileUiTextures.write(staged, profileTextures.generated)
             report.put("tml_textures", JSONArray(profileTextures.tml))
             report.put("generated_ui_textures", JSONArray(profileTextures.generated.keys))
             report.put("required_files", report.getInt("required_files") + profileTextures.generated.size)
@@ -217,38 +210,30 @@ internal object MobileTerrariaConverter {
         val generated: Map<String, Pair<Int, Int>>,
     )
 
-    private fun prepareInventory(context: Context, layout: ByteArray, workspace: File, tmlContent: File): ProfileTextures {
+    private fun prepareInventory(context: Context, workspace: File): ProfileTextures {
         val inventory = sortedMapOf<String, Pair<Int, Int>>()
         val tmlTextures = mutableListOf<String>()
         val generated = sortedMapOf<String, Pair<Int, Int>>()
         for ((id, name) in mapOf(R.raw.pe_music_settings to "TerrariaMusic.xgs", R.raw.pe_music_cues to "Sound Bank.xsb")) {
             context.resources.openRawResource(id).use { copyBounded(it, File(workspace, name), MAX_PROFILE_ENTRY) }
         }
-        layout.inputStream().buffered().use { input ->
-            input.mark(2)
-            val first = input.read()
-            val second = input.read()
-            input.reset()
-            val encoding = if (first == 255 && second == 254 || first == 254 && second == 255)
-                Charsets.UTF_16 else Charsets.UTF_8
-            input.reader(encoding).buffered().useLines { lines ->
-                val rows = lines.iterator()
-                val header = rows.next().removePrefix("\uFEFF").split('\t')
-                val path = header.indexOf("Path")
-                val width = header.indexOf("Width")
-                val height = header.indexOf("Height")
-                require(minOf(path, width, height) >= 0) { "无效的贴图资源清单" }
-                for (line in rows) {
-                    if (line.isBlank()) continue
-                    val fields = line.split('\t')
-                    val name = fields[path] + ".xnb"
-                    checkPath(name, "Images/")
-                    if (legacySplash.matches(name) ||
-                        name.startsWith("Images/UI/Minimap/") && "/MinimapButton_" in name) continue
-                    val size = fields[width].toInt() to fields[height].toInt()
-                    require(size.first > 0 && size.second > 0)
-                    inventory[name] = size
-                }
+        context.resources.openRawResource(R.raw.pe_texture_layout).bufferedReader().useLines { lines ->
+            val rows = lines.iterator()
+            val header = rows.next().removePrefix("\uFEFF").split('\t')
+            val path = header.indexOf("Path")
+            val width = header.indexOf("Width")
+            val height = header.indexOf("Height")
+            require(minOf(path, width, height) >= 0) { "无效的贴图资源清单" }
+            for (line in rows) {
+                if (line.isBlank()) continue
+                val fields = line.split('\t')
+                val name = fields[path] + ".xnb"
+                checkPath(name, "Images/")
+                if (legacySplash.matches(name) ||
+                    name.startsWith("Images/UI/Minimap/") && "/MinimapButton_" in name) continue
+                val size = fields[width].toInt() to fields[height].toInt()
+                require(size.first > 0 && size.second > 0)
+                inventory[name] = size
             }
         }
         val metadata = context.resources.openRawResource(R.raw.pe_conversion_inventory).bufferedReader().use {
@@ -266,7 +251,6 @@ internal object MobileTerrariaConverter {
                 val name = textures.getString(index)
                 checkPath(name, "Images/")
                 require(inventory.remove(name) != null) { "Invalid tModLoader texture in profile: $name" }
-                check(hasTexture(tmlContent, name)) { "所选 tModLoader 缺少贴图：$name" }
                 tmlTextures.add(name)
             }
         }

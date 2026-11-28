@@ -59,6 +59,8 @@ const english: Record<string, string> = {
     'The installed Terraria signing certificate does not match the Google Play edition.',
   '此 APK 未包含 Terraria PE 转换配置。': 'This APK has no Terraria PE conversion profile.',
   '请先安装并选择 tModLoader {version}。': 'Install and select tModLoader {version} first.',
+  '在线版本目录暂不可用，可下载以下兼容版本或导入 ZIP。':
+    'The release catalogs are unavailable. Download the compatible version below or import a ZIP.',
   资源转换进度: 'Asset conversion progress',
   '正在处理…': 'Working…',
   '正在取消…': 'Canceling…',

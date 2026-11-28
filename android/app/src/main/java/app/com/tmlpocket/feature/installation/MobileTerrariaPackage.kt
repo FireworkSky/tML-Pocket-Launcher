@@ -81,7 +81,7 @@ internal object MobileTerrariaPackage {
     }
 
     // Refresh installed content on the next explicit conversion after changing output rules.
-    private const val CONVERTER_REVISION = 8
+    private const val CONVERTER_REVISION = 9
 
     fun fingerprint(info: PackageInfo): String =
         "${info.packageName}:${info.longVersionCode}:${info.lastUpdateTime}:$CONVERTER_REVISION"

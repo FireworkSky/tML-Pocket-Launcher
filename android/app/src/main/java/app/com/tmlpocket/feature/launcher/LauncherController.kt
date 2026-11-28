@@ -26,6 +26,7 @@ import app.com.tmlpocket.feature.mods.ModRepository.Companion.strings
 import app.com.tmlpocket.feature.mods.WorkshopContentInstaller
 import app.com.tmlpocket.feature.patches.PatchRepository
 import app.com.tmlpocket.feature.releases.TmlRelease
+import app.com.tmlpocket.feature.releases.TmlReleasePage
 import app.com.tmlpocket.feature.releases.TmlReleaseSource
 import app.com.tmlpocket.feature.releases.TmlReleaseClient
 import app.com.tmlpocket.feature.renderers.AndroidRendererPluginPackageSource
@@ -472,15 +473,31 @@ internal class LauncherController(private val context: Context) {
                     true
                 }
                 "releases" -> {
-                    val catalogClient = when (params.optString("source", "auto")) {
+                    var catalogClient = when (params.optString("source", "auto")) {
                         "auto" -> client
                         "gitee" -> TmlReleaseClient(TmlReleaseSource.GITEE)
                         "github" -> TmlReleaseClient(TmlReleaseSource.GITHUB)
                         else -> error("无效的 tModLoader 下载源")
                     }
-                    val page = catalogClient.releases(params.optInt("page", 1), cancelled)
+                    val number = params.optInt("page", 1)
+                    var pinnedOnly = false
+                    val page = try {
+                        catalogClient.releases(number, cancelled)
+                    } catch (first: java.io.IOException) {
+                        if (number != 1 || cancelled() || Thread.currentThread().isInterrupted) throw first
+                        val alternate = TmlReleaseClient(TmlReleaseSource.entries.first { it != catalogClient.source })
+                        try {
+                            alternate.releases(1, cancelled).also { catalogClient = alternate }
+                        } catch (second: java.io.IOException) {
+                            if (cancelled() || Thread.currentThread().isInterrupted) throw second
+                            pinnedOnly = true
+                            TmlReleasePage(listOf(catalogClient.source.defaultRelease()), false)
+                        }
+                    }
                     page.releases.forEach { releases[catalogClient.source.key(it.id)] = it }
                     JSONObject()
+                        .put("source", catalogClient.source.name.lowercase())
+                        .put("pinnedOnly", pinnedOnly)
                         .put("hasMore", page.hasMore)
                         .put(
                             "releases",
@@ -629,7 +646,6 @@ internal class LauncherController(private val context: Context) {
                 "terraria.mobile.convert" -> {
                     val packageName = params.optString("packageName").takeIf { it.isNotBlank() }
                     val info = MobileTerrariaPackage.requireInstalled(context, packageName)
-                    installDefaultTml(cancelled)
                     prepareMobileTerraria(cancelled, info)
                     true
                 }
@@ -959,18 +975,21 @@ internal class LauncherController(private val context: Context) {
         }
     }
 
-    private fun installDefaultTml(cancelled: () -> Boolean) {
-        installer.installDefaultTml(cancelled, ::progress) {
-            checkDownloadNetwork()
-            downloadRelease(client, client.source.defaultRelease(), cancelled)
-        }
-    }
-
     private fun downloadRelease(client: TmlReleaseClient, release: TmlRelease, cancelled: () -> Boolean): File {
-        progress("正在从 ${client.source.label} 下载 ${release.tag}…", 0)
-        return client.download(release, File(context.filesDir, "downloads"), cancelled) { done, total ->
-            progress("正在下载 ${release.tag} · ${done / 1048576} MB",
-                if (total > 0) (done * 100 / total).toInt() else -1)
+        fun fetch(provider: TmlReleaseClient, item: TmlRelease): File {
+            progress("正在从 ${provider.source.label} 下载 ${item.tag}…", 0)
+            return provider.download(item, File(context.filesDir, "downloads"), cancelled) { done, total ->
+                progress("正在下载 ${item.tag} · ${done / 1048576} MB",
+                    if (total > 0) (done * 100 / total).toInt() else -1)
+            }
+        }
+        try {
+            return fetch(client, release)
+        } catch (e: TmlReleaseClient.DownloadException) {
+            if (release.tag != TmlReleaseSource.DEFAULT_TAG || cancelled() ||
+                e.reason !in setOf(TmlReleaseClient.DownloadError.NETWORK, TmlReleaseClient.DownloadError.HTTP)) throw e
+            val other = TmlReleaseClient(TmlReleaseSource.entries.first { it != client.source })
+            return fetch(other, other.source.defaultRelease())
         }
     }
 
@@ -1005,7 +1024,6 @@ internal class LauncherController(private val context: Context) {
 
     private fun prepareMobileTerraria(cancelled: () -> Boolean, info: PackageInfo) {
         val target = MobileTerrariaPackage.TARGET_TML
-        val tmlContent = installer.mobileTerrariaTmlContent(instances.versionId(), target)
         val fingerprint = MobileTerrariaPackage.fingerprint(info)
         if (!installer.mobileTerrariaIsCurrent(fingerprint, target)) {
             installer.installMobileTerraria(
@@ -1016,7 +1034,7 @@ internal class LauncherController(private val context: Context) {
                 cancelled,
                 ::progress,
             ) { destination ->
-                MobileTerrariaConverter.convertInstalled(context, destination, info.packageName, tmlContent) { stage, current, total ->
+                MobileTerrariaConverter.convertInstalled(context, destination, info.packageName) { stage, current, total ->
                     if (cancelled()) return@convertInstalled false
                     val (label, value) = when (stage) {
                         "extract" -> "正在提取 Terraria PE 资源…" to 0

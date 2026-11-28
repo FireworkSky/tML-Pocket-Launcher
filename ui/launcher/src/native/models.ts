@@ -118,6 +118,8 @@ export interface NativeRelease {
   size: number;
 }
 export interface ReleasePage {
+  source: 'gitee' | 'github';
+  pinnedOnly: boolean;
   releases: NativeRelease[];
   hasMore: boolean;
 }

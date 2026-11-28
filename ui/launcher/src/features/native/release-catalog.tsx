@@ -36,6 +36,8 @@ export function NativeReleaseCatalog() {
   const regionalSource = nativeState?.releaseSource;
   const [items, setItems] = useState<NativeRelease[]>([]);
   const [page, setPage] = useState(1);
+  const pageSource = useRef<SourceChoice>(sourceChoice);
+  const [pinnedOnly, setPinnedOnly] = useState(false);
   const [more, setMore] = useState(true);
   const [loading, setLoading] = useState(false);
   const [failure, setFailure] = useState<Error | string>();
@@ -54,8 +56,13 @@ export function NativeReleaseCatalog() {
     setLoading(true);
     setFailure(undefined);
     try {
-      const result = await nativeRequest<ReleasePage>('releases', { page: next, source });
+      const result = await nativeRequest<ReleasePage>('releases', {
+        page: next,
+        source: next === 1 ? source : pageSource.current,
+      });
       if (token !== generation.current) return;
+      pageSource.current = result.source;
+      setPinnedOnly(result.pinnedOnly);
       setItems((old) => {
         const previous = replace ? [] : old;
         return [
@@ -219,6 +226,7 @@ export function NativeReleaseCatalog() {
         </>
       }
     >
+      {pinnedOnly && <p role="status">{t('在线版本目录暂不可用，可下载以下兼容版本或导入 ZIP。')}</p>}
       {failureMessage && (
         <div className="resource-catalog-error" role="alert">
           <p>{failureMessage}</p>
