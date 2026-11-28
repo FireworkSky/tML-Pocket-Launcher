@@ -61,9 +61,13 @@ internal object MobileTerrariaPackage {
         val packages = MobileTerrariaChannel.entries.mapNotNull { channel ->
             val info = readInstalled(context, channel.packageName) ?: return@mapNotNull null
             val archives = archives(info)
-            val resources = runCatching { inspectArchives(archives) }.getOrDefault(false)
+            val status = when {
+                !channel.hasTrustedSignature(context.packageManager) -> "signature-mismatch"
+                runCatching { inspectArchives(archives) }.getOrDefault(false) -> "unity"
+                else -> "unsupported"
+            }
             JSONObject()
-                .put("status", if (resources) "unity" else "unsupported")
+                .put("status", status)
                 .put("packageName", info.packageName)
                 .put("channel", channel.id)
                 .put("version", info.versionName.orEmpty())
@@ -85,7 +89,7 @@ internal object MobileTerrariaPackage {
     fun installed(context: Context, packageName: String? = null): PackageInfo? {
         val channels = MobileTerrariaChannel.entries.filter { packageName == null || it.packageName == packageName }
         val candidates = channels.mapNotNull { channel ->
-            readInstalled(context, channel.packageName)
+            readInstalled(context, channel.packageName)?.takeIf { channel.hasTrustedSignature(context.packageManager) }
         }
         return candidates.firstOrNull { runCatching { inspectArchives(archives(it)) }.getOrDefault(false) }
             ?: candidates.firstOrNull()
@@ -95,10 +99,12 @@ internal object MobileTerrariaPackage {
 
     fun requireInstalled(context: Context, packageName: String? = null): PackageInfo {
         val name = packageName ?: MobileTerrariaChannel.GOOGLE_PLAY.packageName
-        require(MobileTerrariaChannel.entries.any { it.packageName == name }) {
+        val channel = requireNotNull(MobileTerrariaChannel.entries.find { it.packageName == name }) {
             "仅支持 Google Play 版 Terraria PE，请重新检测并转换资源"
         }
-        return readInstalled(context, name) ?: throw NotInstalled()
+        val info = readInstalled(context, name) ?: throw NotInstalled()
+        check(channel.hasTrustedSignature(context.packageManager)) { context.getString(R.string.mobile_signature_mismatch) }
+        return info
     }
 
     @Suppress("DEPRECATION")

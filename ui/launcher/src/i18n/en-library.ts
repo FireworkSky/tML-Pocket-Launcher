@@ -54,6 +54,9 @@ const english: Record<string, string> = {
     'Detected Terraria {version} · APK count {count}.',
   '安装包缺少受支持的 Unity 资源容器。':
     'The installed app is missing a supported Unity asset container.',
+  'Google Play 版签名已验证': 'Google Play edition signature verified',
+  '已安装的 Terraria 签名与 Google Play 版不匹配。':
+    'The installed Terraria signing certificate does not match the Google Play edition.',
   '此 APK 未包含 Terraria PE 转换配置。': 'This APK has no Terraria PE conversion profile.',
   '请先安装并选择 tModLoader {version}。': 'Install and select tModLoader {version} first.',
   资源转换进度: 'Asset conversion progress',

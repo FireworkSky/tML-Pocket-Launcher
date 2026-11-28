@@ -1,4 +1,5 @@
 <resources>
+    <string name="mobile_signature_mismatch">已安装的 Terraria 签名与 Google Play 版不匹配。</string>
     <string name="launch_ready">准备出发</string>
     <string name="launch_subtitle">你的世界，即将继续。</string>
     <string name="launch_prepare">正在准备 Android 运行环境…</string>

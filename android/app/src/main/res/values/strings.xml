@@ -1,4 +1,5 @@
 <resources>
+    <string name="mobile_signature_mismatch">The installed Terraria signing certificate does not match the Google Play edition.</string>
     <string name="app_name">tML Pocket Launcher</string>
     <string name="launch_ready">Getting ready</string>
     <string name="launch_subtitle">Your world will be ready shortly.</string>

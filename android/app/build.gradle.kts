@@ -78,8 +78,8 @@ android {
         applicationId = "app.com.tmlpocket"
         minSdk = 28
         targetSdk = 37
-        versionCode = 1040422
-        versionName = "0.1.12"
+        versionCode = 1040423
+        versionName = "0.1.13"
 
         externalNativeBuild {
             cmake {

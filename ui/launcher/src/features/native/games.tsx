@@ -255,7 +255,7 @@ export function NativeGamesPage() {
 }
 
 type MobileTerrariaCandidate = {
-  status: 'unity' | 'unsupported';
+  status: 'unity' | 'unsupported' | 'signature-mismatch';
   packageName: string;
   channel: 'google-play';
   version: string;
@@ -342,14 +342,16 @@ function MobileTerrariaInspection() {
 
   return (
     <div className="native-stack">
-      <p>Google Play</p>
+      {selected.status !== 'signature-mismatch' && <p>{t('Google Play 版签名已验证')}</p>}
       <p>
         {t('已检测到 Terraria {version}，共 {count} 个 APK。', {
           version: selected.version || t('未知版本'),
           count: selected.apkCount.toLocaleString(locale),
         })}
       </p>
-      {selected.status === 'unsupported' ? (
+      {selected.status === 'signature-mismatch' ? (
+        <p role="alert">{t('已安装的 Terraria 签名与 Google Play 版不匹配。')}</p>
+      ) : selected.status === 'unsupported' ? (
         <p>{t('安装包缺少受支持的 Unity 资源容器。')}</p>
       ) : !result.targetTml ? (
         <p>{t('此 APK 未包含 Terraria PE 转换配置。')}</p>
