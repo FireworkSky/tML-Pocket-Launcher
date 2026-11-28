@@ -9,11 +9,13 @@ export function ResourceBrowserLayout({
   toolbar,
   filters,
   children,
+  compactFilters = false,
 }: {
   title: string;
   summary: string;
   toolbar?: ReactNode;
   filters: ReactNode;
+  compactFilters?: boolean;
   children: ReactNode;
 }) {
   const { t } = useTranslation();
@@ -21,7 +23,7 @@ export function ResourceBrowserLayout({
   const [expanded, setExpanded] = useState(false);
   useEffect(() => {
     const container = root.current?.closest('.main');
-    if (!container) return;
+    if (!container || compactFilters) return;
     let wide: boolean | undefined;
     const observer = new ResizeObserver(([entry]) => {
       const nextWide = entry.contentRect.width > 659;
@@ -30,9 +32,9 @@ export function ResourceBrowserLayout({
     });
     observer.observe(container);
     return () => observer.disconnect();
-  }, []);
+  }, [compactFilters]);
   return (
-    <div className="resource-browser" ref={root}>
+    <div className={compactFilters ? "resource-browser workshop-compact" : "resource-browser"} ref={root} data-filters-open={expanded}>
       <div className="resource-browser-toolbar">
         <div className="resource-browser-heading">
           <h2>{title}</h2>
@@ -93,16 +95,18 @@ export function ResourceSelect({
   value,
   onChange,
   options,
+  disabled,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   options: readonly (readonly [string, string])[];
+  disabled?: boolean;
 }) {
   return (
     <div className="resource-filter-select">
       <span>{label}</span>
-      <Select label={label} value={value} onChange={onChange} options={options} />
+      <Select label={label} value={value} onChange={onChange} options={options} disabled={disabled} />
     </div>
   );
 }

@@ -21,7 +21,9 @@ public sealed partial class MobileExternalUiSystem : MobileSystem
 
 	public override void PostSetupContent()
 	{
-		if (Main.dedServ || !ModLoader.TryGetMod("RecipeBrowser", out Mod browser)) return;
+		if (Main.dedServ) return;
+		FindForeignPanelTypes();
+		if (!ModLoader.TryGetMod("RecipeBrowser", out Mod browser)) return;
 		recipeBrowserInstance = browser.Code.GetType("RecipeBrowser.RecipeBrowserUI")?.GetField("instance", Flags);
 		browserVisible = browser.Code.GetType("RecipeBrowser.RecipeBrowserUI")?.GetProperty("ShowRecipeBrowser", Flags);
 		querySlotType = browser.Code.GetType("RecipeBrowser.UIElements.UIQueryItemSlot");
@@ -36,7 +38,7 @@ public sealed partial class MobileExternalUiSystem : MobileSystem
 		return element == root ? null : element;
 	}
 
-	internal static bool BlocksInventory(Vector2 point) => BrowserElement(point) != null;
+	internal static bool BlocksInventory(Vector2 point) => BrowserElement(point) != null || HitsForeignInterface(point);
 
 	internal static Rectangle QueryDropBounds(Vector2 point) => PanelBounds(FindQueryDropTarget(point));
 
@@ -96,6 +98,7 @@ public sealed partial class MobileExternalUiSystem : MobileSystem
 
 	public override void Unload() {
 		UnloadBrowserLayout();
+		UnloadForeignInterfaces();
 		recipeBrowserInstance = null; querySlotType = null; replaceQuery = null; browserVisible = null;
 	}
 }

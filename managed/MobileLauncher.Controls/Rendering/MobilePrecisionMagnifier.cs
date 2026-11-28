@@ -118,9 +118,9 @@ internal sealed class MobilePrecisionMagnifier : MobileSystem
 			string texture = interact ? "WorldInteractCursor" : MobileJoystickInput.AimAndUseMode || lens.HasValue ? "AimReticle" : "WorldAimCross";
 			MobileJoystickConfig config = MobileJoystickConfig.Instance;
 			float size = texture == "WorldAimCross" ? config?.AimCrosshairSize ?? 36f : config?.AimReticleSize ?? 28f;
-			if (ControlTexturePackSystem.TryDraw(batch, texture, marker, size * scale, AimColor)) return;
+			if (DefaultControlTextures.TryDraw(batch, texture, marker, size * scale, AimColor)) return;
 			// Older external packs keep their existing circle and button-hand mappings.
-			if (interact && ControlTexturePackSystem.TryDraw(batch, "PhoneInteractGlyph", marker, size * scale, AimColor)) return;
+			if (interact && DefaultControlTextures.TryDraw(batch, "PhoneInteractGlyph", marker, size * scale, AimColor)) return;
 			if (texture == "AimReticle" || interact) {
 				NativeControlTheme.Reticle(batch, marker, size * scale, AimColor);
 				return;
@@ -143,7 +143,7 @@ internal sealed class MobilePrecisionMagnifier : MobileSystem
 		}
 		// The precision grid is geometry; its center uses the same world cross artwork.
 		float crosshairSize = (MobileJoystickConfig.Instance?.AimCrosshairSize ?? 36f) * scale;
-		if (!ControlTexturePackSystem.TryDraw(batch, "WorldAimCross", marker, crosshairSize, AimColor)) {
+		if (!DefaultControlTextures.TryDraw(batch, "WorldAimCross", marker, crosshairSize, AimColor)) {
 			Texture2D cross = TextureAssets.Cursors[16].Value;
 			batch.Draw(cross, marker, null, AimColor, 0, cross.Size() * .5f,
 				(MobileJoystickConfig.Instance?.AimCrosshairSize ?? 36f) * scale / Math.Max(cross.Width, cross.Height), SpriteEffects.None, 0);

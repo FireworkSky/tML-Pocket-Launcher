@@ -17,6 +17,8 @@ export type FileKind =
   | 'patch'
   | 'pack'
   | 'image'
+  | 'backup-import'
+  | 'backup-export'
   | 'export';
 interface FileRoot {
   id: string;
@@ -54,12 +56,15 @@ const labels: Record<FileKind, string> = {
   'terraria-steam': 'Steam 资源 · ZIP',
   'terraria-gog': 'GOG 安装包 · .sh',
   tml: 'tModLoader · ZIP',
-  mod: '模组 · .tmod',
+  mod: '游戏模组',
   patch: '补丁 · JSON',
   pack: '模组包 · JSON',
   image: '背景 · PNG / JPG / WebP',
   export: '导出模组包 · JSON',
+  'backup-import': '导入存档备份 · ZIP',
+  'backup-export': '导出存档备份 · ZIP',
 };
+const isExport = (kind: FileKind) => kind === 'export' || kind === 'backup-export';
 const fileKey = (file: FileSelection) => JSON.stringify([file.root, file.path]);
 const bytes = (size: number) =>
   size < 1024
@@ -73,7 +78,7 @@ export function useNativeFileBrowser() {
   const { openDialog, closeDialog, notify } = useLauncher();
   const browse = (options: BrowseOptions) =>
     openDialog({
-      title: options.kind === 'export' ? t('保存文件') : t('选择文件'),
+      title: isExport(options.kind) ? t('保存文件') : t('选择文件'),
       description: t(labels[options.kind]),
       drawer: true,
       surface: 'files',
@@ -203,7 +208,7 @@ function NativeFileBrowser({
       go(location.root, entry.path);
       return;
     }
-    if (options.kind === 'export') {
+    if (isExport(options.kind)) {
       setName(entry.name);
       return;
     }
@@ -396,7 +401,7 @@ function NativeFileBrowser({
                   key={entry.path}
                   className={`file-entry ${checked ? 'selected' : ''}`}
                   disabled={pending}
-                  aria-pressed={entry.directory || options.kind === 'export' ? undefined : checked}
+                  aria-pressed={entry.directory || isExport(options.kind) ? undefined : checked}
                   onClick={() => choose(entry)}
                 >
                   <span className={`file-entry-icon ${entry.directory ? 'directory' : ''}`}>
@@ -421,7 +426,7 @@ function NativeFileBrowser({
             })
           )}
         </div>
-        {options.kind === 'export' && (
+        {isExport(options.kind) && (
           <label className="file-save-name">
             {t('文件名')}
             <input
@@ -490,13 +495,13 @@ function NativeFileBrowser({
               pending ||
               loading ||
               !location ||
-              (options.kind === 'export' ? !name.trim() : selected.size === 0)
+              (isExport(options.kind) ? !name.trim() : selected.size === 0)
             }
             onClick={() => void confirm()}
           >
             {pending
               ? t('正在处理…')
-              : options.kind === 'export'
+                : isExport(options.kind)
                 ? t('保存到此目录')
                 : options.kind === 'image'
                   ? t('使用此图片')

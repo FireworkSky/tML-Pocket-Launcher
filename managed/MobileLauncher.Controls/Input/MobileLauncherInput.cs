@@ -14,16 +14,11 @@ internal static partial class MobileJoystickInput
 	internal sealed class LauncherGesture
 	{
 		internal string ControlId;
-		internal Vector2 Previous, Offset;
-		internal float Scroll;
+		internal Vector2 Offset;
 		internal int Sector = -1;
 		internal double Started;
-		internal Vector2 Origin;
-		internal bool Dragging, DoubleTap, PressDrag;
 	}
 	private static double LauncherTime => System.Diagnostics.Stopwatch.GetTimestamp() / (double)System.Diagnostics.Stopwatch.Frequency;
-	private static readonly Dictionary<string, (double Until, string Key)> launcherPendingClicks = new(StringComparer.Ordinal);
-	private static bool launcherRightButton;
 	private static bool launcherCursorActive;
 	private static readonly Dictionary<int, LauncherGesture> launcherGestures = new();
 	private static readonly HashSet<string> launcherToggles = new(StringComparer.Ordinal);
@@ -33,7 +28,15 @@ internal static partial class MobileJoystickInput
 	internal static bool LauncherHeld(string id) => id != null && launcherHeld.Contains(id);
 	internal static bool LauncherToggled(string id) => id != null && launcherToggles.Contains(id);
 	internal static LauncherGesture LauncherState(string id) => launcherGestures.Values.FirstOrDefault(state => state.ControlId == id);
-	private static void ResetLauncherControls() { launcherGestures.Clear(); launcherToggles.Clear(); launcherHeld.Clear(); launcherPendingClicks.Clear(); launcherTriggers.Clear(); previousLauncherTriggers.Clear(); launcherCursorActive = false; }
+	private static void ResetLauncherControls()
+	{
+		launcherGestures.Clear();
+		launcherToggles.Clear();
+		launcherHeld.Clear();
+		launcherTriggers.Clear();
+		previousLauncherTriggers.Clear();
+		launcherCursorActive = false;
+	}
 
 	private static void UpdateLauncherControls()
 	{
@@ -41,12 +44,6 @@ internal static partial class MobileJoystickInput
 		previousLauncherTriggers.Clear(); previousLauncherTriggers.UnionWith(launcherTriggers); launcherTriggers.Clear();
 		launcherCursorActive = false;
 		var buttons = Layout.Buttons.Where(button => button.Launcher != null && IsButtonAvailable(button)).ToDictionary(button => button.Id);
-		launcherRightButton = buttons.Values.Any(button => button.Launcher.Type == "button" && button.Launcher.String("keycode") == "SPECIAL_TOUCHPAD_RIGHT_BUTTON"
-			&& (launcherToggles.Contains(button.Id) || Contacts.Any(contact => !contact.IsReleased && button.Contains(contact.Position))));
-		foreach (var pending in launcherPendingClicks.ToArray()) {
-			if (!buttons.ContainsKey(pending.Key)) launcherPendingClicks.Remove(pending.Key);
-			else if (LauncherTime >= pending.Value.Until) { HoldLauncherKey(pending.Value.Key); launcherPendingClicks.Remove(pending.Key); }
-		}
 		foreach (int id in launcherGestures.Keys.ToArray())
 			if (!buttons.ContainsKey(launcherGestures[id].ControlId) || !Contacts.Any(contact => contact.Id == id)) launcherGestures.Remove(id);
 		launcherToggles.RemoveWhere(id => !buttons.ContainsKey(id));
@@ -55,17 +52,15 @@ internal static partial class MobileJoystickInput
 			bool began = false;
 			if (!launcherGestures.TryGetValue(contact.Id, out LauncherGesture state)) {
 				if (contact.State != TouchLocationState.Pressed || MobileInventorySystem.BlocksControl(contact.Position) || MobileInventorySystem.OwnsContact(contact.Id)) continue;
-				// Last painted control has priority; text is decorative and never steals input.
+				// Last painted control has priority.
 				MobileControlButton? hit = null;
 				foreach (MobileControlButton candidate in buttons.Values.Reverse()) {
-					if (candidate.Launcher.Type == "text" || !candidate.Contains(contact.Position) || !LauncherControlArtwork.AlphaContains(candidate, contact.Position) || !CanActivateCustomButton(candidate, contact)) continue;
+					if (!candidate.Contains(contact.Position) || !CanActivateCustomButton(candidate, contact)) continue;
 					if (launcherGestures.Values.Any(g => g.ControlId == candidate.Id)) continue;
 					hit = candidate; break;
 				}
 				if (!hit.HasValue) continue;
-				state = new LauncherGesture { ControlId = hit.Value.Id, Previous = contact.Position, Origin = contact.Position, Started = LauncherTime };
-				if (hit.Value.Launcher.Type == "touchpad" && hit.Value.Launcher.Flag("isDoubleClickSimulateJoystick", true)
-					&& launcherPendingClicks.Remove(hit.Value.Id, out var pendingClick) && LauncherTime < pendingClick.Until) state.DoubleTap = true;
+				state = new LauncherGesture { ControlId = hit.Value.Id, Started = LauncherTime };
 				launcherGestures[contact.Id] = state;
 				began = true;
 			}
@@ -94,10 +89,7 @@ internal static partial class MobileJoystickInput
 						MoveLauncherCursor(offset * 10f * MobileJoystickConfig.Instance.CursorSensitivity);
 						if (Enum.TryParse(data.String("holdAction"), out MobileControlAction holdAction) && holdAction != MobileControlAction.Unbound) CurrentActions.Add(holdAction);
 					}
-					else HoldLauncherDirections(offset, ((JArray)data.Data["joystickKeys"]).Values<string>().ToArray(), MobileJoystickConfig.Instance.JoystickDeadzone, true);
-					break;
-				case "dpad":
-					if (down) HoldLauncherDirections(offset, new[] { data.String("upKeycode"), data.String("rightKeycode"), data.String("downKeycode"), data.String("leftKeycode") }, data.Number("deadZone", .2f), data.Flag("allowDiagonal", true));
+					else HoldLauncherDirections(offset, ((JArray)data.Data["joystickKeys"]).Values<string>().ToArray(), MobileJoystickConfig.Instance.JoystickDeadzone);
 					break;
 				case "radialmenu":
 					int count = (int)data.Number("sectorCount", 8);
@@ -106,38 +98,7 @@ internal static partial class MobileJoystickInput
 					if (valid && contact.State == TouchLocationState.Released && state.Sector >= 0 && data.Data["sectors"] is JArray sectors && state.Sector < sectors.Count)
 						HoldLauncherKey(sectors[state.Sector].Value<string>("keycode"));
 					break;
-				case "touchpad":
-					if (Vector2.DistanceSquared(contact.Position, state.Origin) > 36) state.Dragging = true;
-					if (down) {
-						if (state.DoubleTap) {
-							if (!hasTouchAimPosition) InitializeTouchAim(contact.Position);
-							Vector2 target = MobileWorldInteraction.ToScreen(Main.LocalPlayer.MountedCenter) + offset * MobileJoystickConfig.Instance.AimDistance;
-							MoveLauncherCursor(target - TouchAimPosition);
-							HoldLauncherKey(launcherRightButton ? "MOUSE_RIGHT" : "MOUSE_LEFT");
-						}
-						else {
-							if (!began && state.Dragging) MoveLauncherCursor((contact.Position - state.Previous) * MobileJoystickConfig.Instance.CursorSensitivity);
-							if (!state.Dragging && LauncherTime - state.Started >= .4) state.PressDrag = true;
-							if (state.PressDrag) HoldLauncherKey(launcherRightButton ? "MOUSE_RIGHT" : "MOUSE_LEFT");
-						}
-					}
-					else if (valid && !state.Dragging && !state.DoubleTap && LauncherTime - state.Started < .4) {
-						string mouseKey = launcherRightButton ? "MOUSE_RIGHT" : "MOUSE_LEFT";
-						if (data.Flag("isDoubleClickSimulateJoystick", true)) launcherPendingClicks[button.Id] = (LauncherTime + .25, mouseKey);
-						else HoldLauncherKey(mouseKey);
-					}
-					break;
-				case "mousewheel":
-					if (down) {
-						Vector2 delta = contact.Position - state.Previous;
-						state.Scroll += -(data.String("orientation", "VERTICAL") == "HORIZONTAL" ? delta.X : delta.Y) * data.Number("scrollRatio", 1) * (data.Flag("reverseDirection") ? -1 : 1);
-						float threshold = data.Number("scrollSensitivity", 40);
-						int steps = Math.Clamp((int)(state.Scroll / threshold), -20, 20);
-						if (steps != 0) { LauncherScroll(steps); state.Scroll -= steps * threshold; }
-					}
-					break;
 			}
-			state.Previous = contact.Position;
 			if (contact.IsReleased) launcherGestures.Remove(contact.Id);
 		}
 		foreach (string id in launcherToggles) { HoldLauncherKey(buttons[id].Launcher.String("keycode")); launcherHeld.Add(id); }
@@ -152,9 +113,8 @@ internal static partial class MobileJoystickInput
 		previousAimOrigin = MobileWorldInteraction.ToScreen(Main.LocalPlayer.MountedCenter);
 		touchAimPosition = Vector2.Clamp(touchAimPosition, Vector2.Zero, new Vector2(PlayerInput.RealScreenWidth - 1, PlayerInput.RealScreenHeight - 1));
 	}
-	private static void HoldLauncherDirections(Vector2 offset, string[] keys, float deadzone, bool diagonal)
+	private static void HoldLauncherDirections(Vector2 offset, string[] keys, float deadzone)
 	{
-		if (!diagonal) { if (Math.Abs(offset.X) > Math.Abs(offset.Y)) offset.Y = 0; else offset.X = 0; }
 		bool[] directions = { offset.Y < -deadzone, offset.X > deadzone, offset.Y > deadzone, offset.X < -deadzone };
 		for (int i = 0; i < 4; i++) if (directions[i]) HoldLauncherKey(keys[i]);
 	}
@@ -164,10 +124,8 @@ internal static partial class MobileJoystickInput
 			MobileKeyboardBindings.Hold(key[MobileKeyboardBindings.LauncherPrefix.Length..]);
 			return;
 		}
-		if (key == "SPECIAL_TOUCHPAD_RIGHT_BUTTON") return;
 		if (key?.StartsWith("ACTION_", StringComparison.Ordinal) == true && Enum.TryParse(key[7..], out MobileControlAction action)) { if (action != MobileControlAction.Unbound) CurrentActions.Add(action); return; }
 		if (key?.StartsWith("TRIGGER_", StringComparison.Ordinal) == true) { HoldLauncherTrigger(key[8..]); return; }
-		if (key is "MOUSE_WHEEL_UP" or "MOUSE_WHEEL_DOWN") { LauncherScroll(key == "MOUSE_WHEEL_UP" ? 1 : -1); return; }
 		if (key == "KEYBOARD_ESCAPE") { CurrentActions.Add(MobileControlAction.Settings); return; }
 		foreach (string trigger in LauncherControlBindings.Resolve(key)) HoldLauncherTrigger(trigger);
 	}

@@ -121,7 +121,7 @@
   color: #c9d7e4;
   font-size: 13px;
 }
-.steam-resource-note > svg {
+.steam-resource-note > img {
   width: 36px;
   height: 36px;
   padding: 8px;
@@ -456,11 +456,10 @@
 .steam-details-source .steam-text-button {
   flex-shrink: 0;
 }
-.steam-game-art > svg {
+.steam-game-art > .steam-game-fallback {
   width: 52px;
   height: 52px;
-  stroke: #b8d6b1;
-  opacity: 0.8;
+  object-fit: contain;
 }
 .steam-game-art > span {
   letter-spacing: 3px;
@@ -617,8 +616,16 @@
   width: 60px;
   height: 64px;
   border-radius: 8px;
-  background: var(--accent-soft);
-  color: var(--accent-ink);
+  background: var(--surface);
+  color: var(--muted);
+}
+.download-game-artwork {
+  background: transparent;
+}
+.download-game-artwork img {
+  width: 80%;
+  height: 80%;
+  object-fit: contain;
 }
 .download-game-icon > svg {
   width: 28px;
@@ -916,7 +923,7 @@
     padding: 26px 16px;
     gap: 14px;
   }
-  .steam-game-art > svg {
+  .steam-game-art > .steam-game-fallback {
     width: 34px;
     height: 34px;
   }

@@ -73,6 +73,18 @@ internal sealed class MobileTitleSettingsSystem : MobileSystem
 		ResetInput(true);
 	}
 
+	internal static bool HandleBack()
+	{
+		if (!Active) return false;
+		if (dropdown != null) dropdown = null;
+		else if (category >= 8) SelectCategory(category == 8 ? 7 : 4);
+		else {
+			SaveChanges();
+			Close();
+		}
+		return true;
+	}
+
 	private static void ResetInput(bool wait)
 	{
 		down = previousDown = pressed = released = scrolling = false;

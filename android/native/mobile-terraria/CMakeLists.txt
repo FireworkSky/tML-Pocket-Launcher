@@ -19,8 +19,8 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(BUILD_SHARED_LIBS OFF)
 set(INSTALL_DOCS OFF)
 FetchContent_Declare(mobile_vgmstream
-    GIT_REPOSITORY https://github.com/vgmstream/vgmstream.git
-    GIT_TAG 24ffd6ce3e1f34fdebf9f5316d18ad2e162838ce
+    URL https://codeload.github.com/vgmstream/vgmstream/tar.gz/24ffd6ce3e1f34fdebf9f5316d18ad2e162838ce
+    URL_HASH SHA256=4c126a0dfdb0d250fee6796f850dbed07412fcc0b947f4c3c4ae4d936cb01ca1
 )
 FetchContent_GetProperties(mobile_vgmstream)
 if(NOT mobile_vgmstream_POPULATED)

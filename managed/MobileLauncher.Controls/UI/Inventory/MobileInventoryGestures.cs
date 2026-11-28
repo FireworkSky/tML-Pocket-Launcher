@@ -63,6 +63,7 @@ public partial class MobileInventorySystem
 	{
 		selectedShopSlot = selectedShopNpc = -1;
 		selectedShopStock = null;
+		heldShopItem = null;
 		inventoryToolsOpen = false;
 		heldHint = null;
 		CloseRecipeDetails();
@@ -184,6 +185,17 @@ public partial class MobileInventorySystem
 			splitSource = null;
 			CloseRecipeDetails();
 			Recipe.FindRecipes();
+		}
+		if (!dragging && dragSource.Value.Context is ItemSlot.Context.ModdedAccessorySlot
+			or ItemSlot.Context.ModdedVanityAccessorySlot or ItemSlot.Context.ModdedDyeSlot) {
+			var source = dragSource.Value;
+			foreach (var slot in gestureSlots) {
+				if (!slot.Locked && source.SameSlot(slot) && slot.Bounds.Contains(dropPoint)
+					&& !MobileExternalUiSystem.BlocksInventory(dropPosition) && Main.mouseItem.IsAir) {
+					NativeTouchClick(() => ItemSlot.LeftClick(slot.Items, slot.Context, slot.Index));
+					break;
+				}
+			}
 		}
 		if (dragging && !(splitSource.HasValue && SplitPanel.Contains(dropPoint))) {
 			if (MobileExternalUiSystem.TryQueryItem(dropPosition, dragSource.Value.Item)) {

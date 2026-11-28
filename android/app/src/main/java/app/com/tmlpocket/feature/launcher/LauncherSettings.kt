@@ -3,6 +3,7 @@ package app.com.tmlpocket.feature.launcher
 import android.content.Context
 import android.content.res.Configuration
 import app.com.tmlpocket.feature.mods.ModRepository.Companion.strings
+import app.com.tmlpocket.feature.installation.GameStorage
 import app.com.tmlpocket.feature.patches.PatchRepository
 import app.com.tmlpocket.feature.renderers.RendererSelection
 import org.json.JSONArray
@@ -12,9 +13,23 @@ import java.util.Locale
 class LauncherSettings(private val context: Context) {
     private val storage = context.getSharedPreferences("launcher-settings", Context.MODE_PRIVATE)
 
+    fun hasAcceptedNotice(): Boolean = storage.getBoolean("first-launch-notice-accepted", false)
+
+    fun acceptNotice(): Boolean =
+        hasAcceptedNotice() || storage.edit().putBoolean("first-launch-notice-accepted", true).commit()
+
     fun read(): JSONObject =
         runCatching { JSONObject(storage.getString("preferences", "{}") ?: "{}") }
             .getOrDefault(JSONObject())
+            .also { result ->
+                result.remove("threadStackMiB")
+                result.remove("renderScale")
+                result.remove("controlTextureSource")
+                val preferences = runCatching { GameStorage(context).instances().preferences() }.getOrNull()
+                if (preferences != null) {
+                    for (key in INSTANCE_FIELDS) if (preferences.has(key)) result.put(key, preferences.get(key))
+                }
+            }
 
     fun localizedContext(): Context {
         val language = when (read().optString("language")) {
@@ -42,11 +57,14 @@ class LauncherSettings(private val context: Context) {
                 "motion",
                 "glassEffects",
                 "touchEnabled",
-                "wifiOnly" -> require(value is Boolean)
+                "wifiOnly",
+                "highRefreshRate",
+                "fixed1080p",
+                "autoBackup" -> require(value is Boolean)
                 "glass" -> require(value is Number && value.toInt() in 25..50)
                 "touchOpacity" -> require(value is Number && value.toInt() in 20..100)
-                "renderScale" -> require(value in listOf(50, 75, 100))
                 "rendererPlugin" -> require(value is String && RendererSelection.isValidIdentity(value))
+                "renderResolutionPercent" -> require(value is Int && value in listOf(60, 75, 100))
                 "background" -> require(value in listOf("none", "diy", "custom"))
                 "backgroundTint" ->
                     require(value is String && Regex("^#[0-9a-fA-F]{6}$").matches(value))
@@ -79,7 +97,19 @@ class LauncherSettings(private val context: Context) {
             }
             result.put(key, value)
         }
-        storage.edit().putString("preferences", result.toString()).apply()
+        if (INSTANCE_FIELDS.any { patch.has(it) }) {
+            val instances = GameStorage(context).instances()
+            val scoped = instances.preferences()
+            for (key in INSTANCE_FIELDS) if (patch.has(key)) scoped.put(key, patch.get(key))
+            instances.savePreferences(scoped)
+        }
+        val global = runCatching { JSONObject(storage.getString("preferences", "{}") ?: "{}") }.getOrDefault(JSONObject())
+        for (key in patch.keys()) if (key !in INSTANCE_FIELDS) global.put(key, patch.get(key))
+        storage.edit().putString("preferences", global.toString()).apply()
         return result
+    }
+
+    companion object {
+        val INSTANCE_FIELDS = setOf("rendererPlugin", "renderResolutionPercent", "fixed1080p", "highRefreshRate", "launchArguments", "autoBackup")
     }
 }

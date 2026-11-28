@@ -149,22 +149,9 @@ internal static class MobileSettingsCatalog
 			case 5:
 				Action("TouchControls", () => MobileMenuSystem.OpenTouchEditor());
 				Action("LauncherControlPacks", MobileMenuSystem.OpenLauncherControlPacks);
-				Action("ControlTexturePack", () => {
-					if (!ControlTexturePackSystem.ActivateNextPack())
-						Main.NewText(Text("TexturePackFailedToLoadDetailsWereWrittenToTheClientLog"), Color.OrangeRed);
-				});
-				items[^1].Display = () => ControlTexturePackSystem.ActivePackName;
-				Action("OpenTexturePackFolder", () => {
-					try {
-						string path = ControlTexturePackSystem.OpenPackDirectory();
-						Main.NewText(Text("PlaceZipTexturePacksHereThenSelectTheControlTexturePackAbove") + " " + path);
-					}
-					catch (Exception) {
-						Main.NewText(Text("CouldNotOpenTheTexturePackFolder"), Color.OrangeRed);
-					}
-				});
 				Toggle("TouchInput", () => c.EnableTouchInput, v => c.EnableTouchInput = v, true);
 				Toggle("MouseTouchSimulation", () => c.EnableMouseFallback, v => c.EnableMouseFallback = v, true);
+				Toggle("ShowMouseCursor", () => c.ShowMouseCursor, v => c.ShowMouseCursor = v, true);
 				Toggle("PinchZoom", () => c.EnablePinchZoom, v => c.EnablePinchZoom = v, true);
 				Choice("HotbarOrientation", () => new[] { Text("Vertical"), Text("Horizontal") },
 					() => (int)c.HotbarOrientation, v => c.HotbarOrientation = (MobileHotbarOrientation)v);

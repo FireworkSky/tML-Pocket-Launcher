@@ -10,6 +10,7 @@ public enum MobileCustomControlKind
 	Joystick,
 	Button,
 	RadialMenu,
+	// Keep legacy names readable until validation removes these controls.
 	DPad,
 	Touchpad,
 	Mousewheel,
@@ -36,6 +37,8 @@ public sealed class MobileCustomControl
 	public string KeyboardKey { get; set; } = string.Empty;
 	public List<string> RadialKeyboardKeys { get; set; } = new();
 	public string TextureName { get; set; } = string.Empty;
+	[Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+	public string CustomTexture { get; set; }
 	public float X { get; set; }
 	public float Y { get; set; }
 	public float Size { get; set; } = 1f;
@@ -109,7 +112,7 @@ internal static class MobileCustomControls
 				if (string.IsNullOrWhiteSpace(preset.Name)) preset.Name = defaults[i].Name;
 				int before = preset.Controls?.Count ?? 0;
 				Validate(preset);
-				if (before > preset.Controls.Count && !preset.Controls.Any(control => control.Kind != MobileCustomControlKind.Text)) {
+				if (before > preset.Controls.Count && preset.Controls.Count == 0) {
 					preset = Clone(defaults[i]);
 					if (i == config.ActiveCustomPresetIndex) clearedActivePreset = true;
 				}
@@ -140,7 +143,7 @@ internal static class MobileCustomControls
 		HashSet<string> ids = new(StringComparer.Ordinal);
 		List<MobileCustomControl> valid = new();
 		foreach (MobileCustomControl control in preset.Controls) {
-			if (control == null || !Enum.IsDefined(control.Kind)) continue;
+			if (control == null || control.Kind is not (MobileCustomControlKind.Joystick or MobileCustomControlKind.Button or MobileCustomControlKind.RadialMenu)) continue;
 			// Old presets may contain modes removed from the editor/importer.
 			if (control.Launcher != null && (!MobileLauncherControl.SupportsMode(control.Launcher.Data)
 				|| LauncherControlBindings.ControlKeys(control.Launcher.Data).Any(LauncherControlBindings.RemovedBinding))) continue;
@@ -214,6 +217,7 @@ internal static class MobileCustomControls
 			KeyboardKey = control.KeyboardKey,
 			RadialKeyboardKeys = control.RadialKeyboardKeys?.ToList() ?? new(),
 			TextureName = control.TextureName,
+			CustomTexture = control.CustomTexture,
 			X = control.X,
 			Y = control.Y,
 			Size = control.Size,

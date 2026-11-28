@@ -97,6 +97,7 @@ internal object StoreRuntime {
             output.flush()
             val input = it.getInputStream().buffered()
             val partial = java.io.ByteArrayOutputStream()
+            val responseLimit = if (method == "tml.resources") 2_000_000 else 100_000
             val deadline =
                 SystemClock.elapsedRealtime() +
                     if (method.endsWith("download") || method == "gog.import") 7_500_000
@@ -104,6 +105,7 @@ internal object StoreRuntime {
             var cancelSent = false
             while (SystemClock.elapsedRealtime() < deadline) {
                 if (cancelled() && !cancelSent) {
+                    if (method == "steam.verify") throw java.io.InterruptedIOException("启动已取消")
                     cancelSent = true
                     request(context, "cancel")
                 }
@@ -116,7 +118,7 @@ internal object StoreRuntime {
                 if (byte < 0) throw IOException("商店连接已关闭，请重试")
                 if (byte != 10) {
                     partial.write(byte)
-                    require(partial.size() <= 100_000) { "商店返回的数据过大" }
+                    require(partial.size() <= responseLimit) { "运行时返回的数据过大" }
                     continue
                 }
                 val line = partial.toString("UTF-8")

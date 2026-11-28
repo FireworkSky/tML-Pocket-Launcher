@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 28" fill="none" shape-rendering="crispEdges">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 181 28" fill="none" stroke-linecap="square" stroke-linejoin="bevel">
   <defs>
-    <path id="pocket" d="M7 8h10m-5 0v14m11 0V7l6 6 6-6v15m7-15v15h10m11 0V7h10v8H63m16-8h10v15H79zm26 0H95v15h10m6-15v15m10-15-10 8 10 7m15-15h-9v15h9m-9-8h7m9-7h9m-4.5 0v15"/>
+    <path id="pocket" d="M7 7h10m-5 0v15 M26 22V7l6 6 6-6v15 M47 7v15h10 M70 22V7h10v8H70 M89 7h10v15H89z M118 7h-10v15h10 M127 7v15m10-15-10 8 10 7 M155 7h-9v15h9m-9-8h7 M164 7h10m-5 0v15"/>
     <linearGradient id="stone" x2="0" y1="0" y2="1" gradientUnits="objectBoundingBox">
       <stop stop-color="#b8e087"/>
       <stop offset=".28" stop-color="#76b75c"/>

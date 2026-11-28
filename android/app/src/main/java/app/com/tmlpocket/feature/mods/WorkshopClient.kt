@@ -42,7 +42,7 @@ class WorkshopClient {
         val detail = details(id)
         val address = detail.optString("file_url")
         require(address.isNotBlank()) {
-            "此模组需要 Steam UGC 下载服务，暂不提供公开直链。请从已购游戏的 Steam 客户端获取 .tmod 后导入。"
+            "此模组需要 Steam UGC 下载服务，暂不提供公开直链。请从已购游戏的 Steam 客户端下载游戏模组后导入。"
         }
         var url = URL(address)
         var connection: HttpURLConnection? = null

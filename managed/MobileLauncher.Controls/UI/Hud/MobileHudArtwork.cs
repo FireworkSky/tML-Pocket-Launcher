@@ -24,8 +24,8 @@ internal static class MobileHudArtwork
 		if (button.Id != null && !MobileControlArtwork.UsesDefaultTexture(button.TextureName,
 			MobileJoystickLayout.GetDefaultTexture(button.Action))) return false;
 		Rectangle bounds = button.Bounds;
-		if (ControlTexturePackSystem.TryDrawFrame(Main.spriteBatch, "HudToolbar", bounds, 10, bounds.Width / 100f, Color.White)) {
-			if (!ControlTexturePackSystem.TryDraw(Main.spriteBatch, "Hud" + name, button.Center,
+		if (DefaultControlTextures.TryDrawFrame(Main.spriteBatch, "HudToolbar", bounds, 10, bounds.Width / 100f, Color.White)) {
+			if (!DefaultControlTextures.TryDraw(Main.spriteBatch, "Hud" + name, button.Center,
 				Math.Min(bounds.Width, bounds.Height) * .72f, pressed ? Color.White : Color.White * .95f))
 				MobileControlArtwork.DrawActionIcon(Main.spriteBatch, button.Action, button.Center, button.Radius * 1.35f, Color.White);
 			return true;

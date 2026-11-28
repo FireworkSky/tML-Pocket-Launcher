@@ -1,17 +1,74 @@
 import { useEffect, useState } from 'react';
+import { LabeledSelect } from '../../components/form-controls';
 import { Badge, Button, WorkspaceTabs } from '../../components/ui';
 import { useTranslation } from '../../i18n';
 import { nativeRequest } from '../../native/bridge';
+import type { TerrariaSource } from '../../native/models';
 import { useLauncher } from '../../state/launcher';
 import { useGameActions } from '../game-actions';
 import { NativeVersionManager } from './versions';
 import { NativeAcquireAction } from './controls';
+import { useNativeActions } from './actions';
+
+const editions = [
+  { source: 'steam', label: 'Steam' },
+  { source: 'gog', label: 'GOG' },
+  { source: 'android', label: 'Terraria PE' },
+] as const;
 
 export function NativeGamesPage() {
   const { t } = useTranslation();
   const { state, update, nativeState, versions, importInfo, accounts } = useGameActions();
-  const { openDialog, notify } = useLauncher();
+  const launcher = useLauncher();
+  const { openDialog, closeDialog, notify } = launcher;
+  const { importFile } = useNativeActions(launcher);
   const tab = state.gameTab === 'accounts' ? 'sources' : state.gameTab;
+  const installedEditions = nativeState?.installedTerraria ?? [];
+  const activeEdition = installedEditions.find((edition) => edition.active);
+  const editionOptions = editions.flatMap(({ source, label }) => {
+    const installed = installedEditions.find((edition) => edition.source === source);
+    return installed ? [[source, `${label} · ${installed.version}`] as const] : [];
+  });
+  const install = (source: TerrariaSource) => {
+    if (source === 'android') {
+      openDialog({
+        title: 'Terraria PE',
+        description: t('本机 Terraria 资源'),
+        body: <MobileTerrariaInspection />,
+      });
+      return;
+    }
+    openDialog({
+      title: t('安装 {source} 版 Terraria', { source: source === 'steam' ? 'Steam' : 'GOG' }),
+      description: t(source === 'steam' ? 'Steam ZIP' : 'GOG Linux .sh'),
+      actions: (
+        <>
+          <Button
+            onClick={() => {
+              closeDialog(false);
+              importFile(source === 'steam' ? 'terraria-steam' : 'terraria-gog');
+            }}
+          >
+            {t('导入资源')}
+          </Button>
+          <Button
+            variant="primary"
+            onClick={() => {
+              closeDialog(false);
+              accounts(source);
+            }}
+          >
+            {t('登录并下载')}
+          </Button>
+        </>
+      ),
+    });
+  };
+  const changeEdition = (
+    method: 'terraria.select' | 'terraria.uninstall',
+    source: TerrariaSource,
+  ) => void nativeRequest(method, { source }).catch((error: Error) => notify(t(error.message)));
+
   return (
     <div className="native-games-workspace">
       <WorkspaceTabs
@@ -24,40 +81,87 @@ export function NativeGamesPage() {
             label: t('已安装'),
             content: (
               <div className="native-game-library">
-                <section className="native-resource-status" aria-label={t('Terraria 资源状态')}>
-                  <img src="/terraria.png" alt="" />
-                  <div>
-                    <h2>{t('Terraria 资源')}</h2>
-                    <p>
-                      {nativeState?.terraria
-                        ? `${nativeState.terraria} · ${
-                            nativeState.terrariaSource === 'android'
-                              ? t('Android 版 · 离线可用')
-                              : nativeState.terrariaSource === 'gog'
-                                ? t('GOG · 离线可用')
-                                : t('Steam · 启动前验证所有权')
-                          }`
-                        : t('尚未导入，前往「添加游戏」准备原版资源。')}
-                    </p>
+                <section
+                  className="panel native-version-panel"
+                  aria-labelledby="terraria-library-title"
+                >
+                  <div className="panel-header">
+                    <h2 id="terraria-library-title">{t('Terraria 游戏管理')}</h2>
                   </div>
-                  <Badge tone={nativeState?.terraria ? 'green' : ''}>
-                    {t(nativeState?.terraria ? '已校验' : '待准备')}
-                  </Badge>
-                  {nativeState?.desktopTerrariaSource &&
-                    nativeState.desktopTerrariaSource !== nativeState.terrariaSource && (
-                      <Button
-                        disabled={nativeState.busy}
-                        onClick={() =>
-                          void nativeRequest('terraria.desktop.select').catch((error: Error) =>
-                            notify(error.message),
-                          )
+                  <div className="native-versions version-list">
+                    {editionOptions.length > 0 && (
+                      <LabeledSelect
+                        className="version-selector"
+                        label={t('切换 Terraria 版本')}
+                        value={activeEdition?.source ?? ''}
+                        options={[
+                          ...(!activeEdition ? ([['', t('选择版本'), true]] as const) : []),
+                          ...editionOptions,
+                        ]}
+                        disabled={
+                          nativeState?.busy || (!!activeEdition && editionOptions.length === 1)
                         }
-                      >
-                        {t('切换到 {source}', {
-                          source: nativeState.desktopTerrariaSource === 'gog' ? 'GOG' : 'Steam',
-                        })}
-                      </Button>
+                        onChange={(source) =>
+                          changeEdition('terraria.select', source as TerrariaSource)
+                        }
+                      />
                     )}
+                    {editions.map(({ source, label }) => {
+                      const installed = installedEditions.find(
+                        (edition) => edition.source === source,
+                      );
+                      const disabled = !nativeState || nativeState.busy;
+                      return (
+                        <div className="version-item" key={source}>
+                          <div className="version-summary">
+                            <strong>{label}</strong>
+                            <span>{installed?.version || t('未安装')}</span>
+                            {installed?.active && <Badge tone="green">{t('当前使用')}</Badge>}
+                            {installed?.hasPeTextures && <Badge>{t('带 PE 纹理')}</Badge>}
+                          </div>
+                          <div className="version-actions">
+                            {installed && !installed.active && (
+                              <Button
+                                disabled={disabled}
+                                onClick={() => changeEdition('terraria.select', source)}
+                              >
+                                {t('使用此版本')}
+                              </Button>
+                            )}
+                            <Button disabled={disabled} onClick={() => install(source)}>
+                              {t(installed ? '重新安装' : '安装游戏')}
+                            </Button>
+                            {installed && (
+                              <Button
+                                disabled={disabled}
+                                onClick={() =>
+                                  openDialog({
+                                    title: t('卸载 {source} 版 Terraria', { source: label }),
+                                    description: t('删除此版本的游戏资源。存档和模组会保留。'),
+                                    actions: (
+                                      <>
+                                        <Button onClick={() => closeDialog()}>{t('取消')}</Button>
+                                        <Button
+                                          onClick={() => {
+                                            closeDialog(false);
+                                            changeEdition('terraria.uninstall', source);
+                                          }}
+                                        >
+                                          {t('卸载')}
+                                        </Button>
+                                      </>
+                                    ),
+                                  })
+                                }
+                              >
+                                {t('卸载')}
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </section>
                 <section
                   className="panel native-version-panel"
@@ -108,7 +212,7 @@ export function NativeGamesPage() {
                     <img src="/terraria.png" alt="" />
                     <div>
                       <h2>{t('Terraria 原版资源')}</h2>
-                      <p>{t('从已购游戏获取，或导入本地安装包。')}</p>
+                      <p>{t('Steam 和 GOG 版可直接使用内置触控纹理。')}</p>
                     </div>
                   </div>
                   <div className="native-acquire-options">
@@ -137,13 +241,7 @@ export function NativeGamesPage() {
                       label={t('检测 Terraria PE')}
                       description={t('从本机安装包转换游戏资源')}
                       symbol="game"
-                      onClick={() =>
-                        openDialog({
-                          title: 'Terraria PE',
-                          description: t('本机 Terraria 资源'),
-                          body: <MobileTerrariaInspection />,
-                        })
-                      }
+                      onClick={() => install('android')}
                     />
                   </div>
                 </section>
@@ -156,14 +254,19 @@ export function NativeGamesPage() {
   );
 }
 
-type MobileTerrariaResult =
-  | { status: 'not-installed' }
-  | {
-      status: 'unity' | 'unsupported';
-      version: string;
-      apkCount: number;
-      targetTml: string | null;
-    };
+type MobileTerrariaCandidate = {
+  status: 'unity' | 'unsupported';
+  packageName: string;
+  channel: 'google-play';
+  version: string;
+  apkCount: number;
+};
+type MobileTerrariaResult = {
+  status: 'not-installed' | MobileTerrariaCandidate['status'];
+  packageName?: string;
+  packages: MobileTerrariaCandidate[];
+  targetTml: string | null;
+};
 
 function MobileTerrariaInspection() {
   const { t, locale } = useTranslation();
@@ -171,6 +274,7 @@ function MobileTerrariaInspection() {
   const [result, setResult] = useState<MobileTerrariaResult>();
   const [error, setError] = useState('');
   const [conversionError, setConversionError] = useState('');
+  const [inspectionAttempt, setInspectionAttempt] = useState(0);
   const [cancelling, setCancelling] = useState(false);
   const converting = nativeState?.busy && nativeState.operation === 'terraria.mobile.convert';
   useEffect(() => {
@@ -186,11 +290,39 @@ function MobileTerrariaInspection() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [inspectionAttempt]);
   if (error) return <p role="alert">{t('安装包检查失败。{error}', { error })}</p>;
   if (!result) return <p role="status">{t('正在检查本机安装包…')}</p>;
-  if (result.status === 'not-installed')
-    return <p role="status">{t('本机未检测到 505 Games 发行的 Terraria PE。')}</p>;
+  if (result.status === 'not-installed') {
+    return (
+      <div className="native-stack">
+        <p role="status">{t('本机未检测到 Google Play 版 Terraria PE。')}</p>
+        <div className="dialog-actions">
+          <Button
+            onClick={() => {
+              setResult(undefined);
+              setInspectionAttempt((attempt) => attempt + 1);
+            }}
+          >
+            {t('重新检测')}
+          </Button>
+          <Button
+            variant="primary"
+            onClick={() =>
+              void nativeRequest('terraria.mobile.openStore').catch(() =>
+                notify(t('无法打开 Google Play。')),
+              )
+            }
+          >
+            {t('前往 Google Play')}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  const selected = result.packages[0];
+  if (!selected) return <p role="alert">{t('请重新检测 Terraria PE 安装包。')}</p>;
 
   const conversionMessage = nativeState?.message ?? '';
   const conversionStep = /^正在转换(贴图、字体和音效|音乐)（(\d+)\/(\d+)）…$/.exec(
@@ -210,13 +342,14 @@ function MobileTerrariaInspection() {
 
   return (
     <div className="native-stack">
+      <p>Google Play</p>
       <p>
         {t('已检测到 Terraria {version}，共 {count} 个 APK。', {
-          version: result.version || t('未知版本'),
-          count: result.apkCount.toLocaleString(locale),
+          version: selected.version || t('未知版本'),
+          count: selected.apkCount.toLocaleString(locale),
         })}
       </p>
-      {result.status === 'unsupported' ? (
+      {selected.status === 'unsupported' ? (
         <p>{t('安装包缺少受支持的 Unity 资源容器。')}</p>
       ) : !result.targetTml ? (
         <p>{t('此 APK 未包含 Terraria PE 转换配置。')}</p>
@@ -250,7 +383,9 @@ function MobileTerrariaInspection() {
           onClick={() => {
             setCancelling(false);
             setConversionError('');
-            void nativeRequest('terraria.mobile.convert').then(
+            void nativeRequest('terraria.mobile.convert', {
+              packageName: selected.packageName,
+            }).then(
               () => {
                 closeDialog(false);
                 navigate('home');

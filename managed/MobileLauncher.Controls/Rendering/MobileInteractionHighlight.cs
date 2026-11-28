@@ -56,6 +56,10 @@ public sealed class MobileInteractionHighlight
 
 	internal static void Clear()
 	{
+		if (!Program.IsMainThread) {
+			Main.QueueMainThreadAction(Clear);
+			return;
+		}
 		foreach (Texture2D texture in silhouettes.Values) texture.Dispose();
 		silhouettes.Clear();
 	}

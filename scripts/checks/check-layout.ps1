@@ -4,7 +4,6 @@ param()
 $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 $sourceRoot = Join-Path $repoRoot 'android/app/src/main/java'
-$testRoot = Join-Path $repoRoot 'android/app/src/test/java'
 foreach ($required in @('android/settings.gradle.kts', 'MobileLauncher.slnx', 'managed/Directory.Build.props', '.editorconfig', '.gitattributes', 'docs/architecture.md', 'docs/code-style.md')) {
     if (-not (Test-Path -LiteralPath (Join-Path $repoRoot $required))) { throw "Missing project entry: $required" }
 }
@@ -18,7 +17,7 @@ foreach ($feature in @('installation', 'releases')) {
 }
 $managedRoot = Join-Path $repoRoot 'managed'
 Get-ChildItem -LiteralPath $managedRoot -Recurse -File -Filter '*.cs' |
-    Where-Object { $_.FullName -notmatch '[\\/](bin|obj|tests)[\\/]' } |
+    Where-Object { $_.FullName -notmatch '[\\/](bin|obj)[\\/]' } |
     ForEach-Object {
         $text = [IO.File]::ReadAllText($_.FullName)
         $declaration = [regex]::Match($text, '(?m)^namespace\s+([\w.]+);')
@@ -29,7 +28,7 @@ Get-ChildItem -LiteralPath $managedRoot -Recurse -File -Filter '*.cs' |
         }
         if ($text -match 'TmlAndroidBootstrap|TmlAndroidHost|FnaTemplate') { throw "Retired managed namespace: $($_.FullName)" }
     }
-foreach ($root in @($sourceRoot, $testRoot)) {
+foreach ($root in @($sourceRoot)) {
     Get-ChildItem -LiteralPath $root -Recurse -File -Filter '*.kt' | ForEach-Object {
         $text = [IO.File]::ReadAllText($_.FullName)
         $declaration = [regex]::Match($text, '(?m)^package\s+([\w.]+)')

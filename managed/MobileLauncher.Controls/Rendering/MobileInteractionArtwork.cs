@@ -47,7 +47,7 @@ internal static class MobileInteractionArtwork
 	internal static bool DrawNpc(SpriteBatch batch, NPC npc, Vector2 center, float size, Color color)
 	{
 		// Packs can supply a larger portrait; modded NPCs retain their registered head as fallback.
-		if (ControlTexturePackSystem.TryDraw(batch, "NpcPortrait" + npc.type, center, size, color)) return true;
+		if (DefaultControlTextures.TryDraw(batch, "NpcPortrait" + npc.type, center, size, color)) return true;
 		int head = TownNPCProfiles.GetHeadIndexSafe(npc);
 		if (head <= 0 || head >= TextureAssets.NpcHead.Length) return false;
 		Texture2D texture = TextureAssets.NpcHead[head].Value;

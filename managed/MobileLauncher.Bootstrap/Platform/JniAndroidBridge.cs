@@ -113,6 +113,8 @@ public sealed class JniAndroidBridge : IAndroidBridge
     public void HideStartupStatus() =>
         ThrowOnFailure(NativeMethods.HideStartupStatus(), "hide startup status");
 
+    public void ReportFrameRate(int fps) => NativeMethods.ReportFrameRate(fps);
+
     public bool HasPermission(string permission)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(permission);
@@ -312,6 +314,9 @@ public sealed class JniAndroidBridge : IAndroidBridge
 
         [DllImport("main", EntryPoint = "tml_pocket_bridge_hide_startup_status")]
         public static extern int HideStartupStatus();
+
+        [DllImport("main", EntryPoint = "tml_pocket_bridge_report_frame_rate")]
+        public static extern void ReportFrameRate(int fps);
 
         [DllImport("main", EntryPoint = "tml_pocket_bridge_has_permission")]
         public static extern int HasPermission([MarshalAs(UnmanagedType.LPUTF8Str)] string permission);

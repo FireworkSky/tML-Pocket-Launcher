@@ -26,11 +26,8 @@ managed/
   MobileLauncher.Host/           Managed process entry point
   MobileLauncher.Bootstrap/      Assembly loading and Android compatibility
   MobileLauncher.Stores/         SteamKit2/GOG authentication and resource transport
-  MobileLauncher.Patches/        Bundled tML touch/rendering/optional hosting adapters
+  MobileLauncher.Patches/        Bundled tML touch, rendering and hosting adapters
   MobileLauncher.Controls/       Embedded touch patch, localization and texture metadata
-  tests/
-    MobileLauncher.Bootstrap.Tests/ Managed compatibility tests
-    MobileLauncher.Stores.Tests/   Store archive, path and integrity tests
 scripts/
   build/                         Launcher publish and APK preparation
   checks/                        Repository and package verification
@@ -46,13 +43,12 @@ ui/launcher/                     Offline React/TypeScript launcher UI (Animate U
   src/features/                  Launcher pages and workflows
   src/domain/                    Typed mod metadata, dependencies and pack validation
   src/state/                     Session state and versioned visual preferences
-  tests/                         Browser workflow and accessibility verification
 build/                           Ignored generated artifacts and diagnostics
 ```
 
 ## Dependency direction
 
-Android source sets stay under `android/app/src/main` and `android/app/src/test`. C# projects, tests and shared build settings live exclusively under `managed/`. The root solution provides a single entry point for managed builds.
+Android source sets stay under `android/app/src/`. C# projects and shared build settings live under `managed/`. The root solution provides a single entry point for managed builds.
 
 The UI sources live under `ui/launcher`; its Web `src/` directory remains separate
 from Android source sets and C# projects. Gradle builds and bundles the approved
@@ -99,6 +95,6 @@ SDL forwards raw contacts directly to FNA. `MobileLauncher.Patches` adapts FNA p
 
 `LegacyTouchMod` moves previous MobileJoystick files to `userdata/Mods/.launcher-backup` and removes the old entry from the enabled list. The launcher editors and patch share `userdata/MobileControls.json`. On first use they can read the previous MobileJoystick settings from `userdata/ModConfigs`.
 
-Only the fixed APK-owned `MobileLauncher.Patches.dll` can execute patches. Required adapters are installed once per game process; optional FPS display, 120 FPS and integrated hosting default off. Optional flags and render scale are read when the game process starts. Hosting retains its upstream exact assembly MVID guard and requires tML 2026.09.3.1. An unsupported host version rolls back hooks. No room starts until requested in game. The existing resource/social/logging/URL adapters cover the upstream base patch without installing a competing base DLL. The successful final buffer swap owns the startup overlay's first-frame signal.
+Only the fixed APK-owned `MobileLauncher.Patches.dll` can execute patches. Required adapters, including the hosting patch, are initialized once per game process. The optional 120 FPS patch defaults off. The touch HUD reads frame statistics from successful presents. Hosting uses the upstream exact assembly MVID guard for tML 2026.09.3.1. On other versions, the game falls back to client mode. Players create rooms from inside the game. The existing resource/social/logging/URL adapters cover the upstream base patch without installing a competing base DLL. The successful final buffer swap owns the startup overlay's first-frame signal.
 
 Compile-only references are staged under ignored `build/game-references` from a precompiled release. No tML, FNA or Terraria resource files are included in the APK or rebuilt. The build invokes tML's packager with a separate `build/mod-packaging-userdata` directory; it never uses the developer's normal mod/save directory.

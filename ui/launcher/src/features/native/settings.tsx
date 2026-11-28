@@ -1,14 +1,29 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Badge, Button, SettingRow, Switch } from '../../components/ui';
 import { Select } from '../../components/form-controls';
 import { useGameActions } from '../game-actions';
 import { nativeRequest } from '../../native/bridge';
 import { useTranslation } from '../../i18n';
+import { useLauncher } from '../../state/launcher';
 import { ControlsEditor } from './controls-editor';
+import { useControlArtwork } from './control-artwork';
 
 export function NativeRuntimeSettings() {
   const { t } = useTranslation();
   const { showInfo, nativeState, notify } = useGameActions();
+  const [childLimit, setChildLimit] = useState('unknown');
+  useEffect(() => {
+    let mounted = true;
+    const refresh = () => void nativeRequest<string>('system.childProcessLimit')
+      .then((status) => { if (mounted) setChildLimit(status); })
+      .catch(() => { if (mounted) setChildLimit('unknown'); });
+    refresh();
+    window.addEventListener('launcher:files-resume', refresh);
+    return () => {
+      mounted = false;
+      window.removeEventListener('launcher:files-resume', refresh);
+    };
+  }, []);
   const rendererOptions = nativeState?.renderers?.length
     ? nativeState.renderers
     : [
@@ -65,24 +80,45 @@ export function NativeRuntimeSettings() {
           />
         </SettingRow>
         <SettingRow
-          title={t('分辨率比例')}
-          description={t('降低渲染负担，触摸坐标随画面同步；下次启动生效。')}
+          title={t('内部渲染分辨率')}
+          description={t('降低分辨率可减轻绘制负担，画面会变软，视野也可能缩小。下次启动生效。')}
         >
           <Select
-            label={t('分辨率比例')}
-            value={String(nativeState?.preferences.renderScale ?? 100)}
+            label={t('内部渲染分辨率')}
+            value={nativeState?.preferences.fixed1080p ? 'fixed' : String(nativeState?.preferences.renderResolutionPercent ?? 100)}
             options={[
-              ['50', '50%'],
+              ['100', t('原始分辨率（关闭）')],
+              ['fixed', '2400 × 1080'],
               ['75', '75%'],
-              ['100', '100%'],
+              ['60', t('60%（受游戏最低分辨率限制）')],
             ]}
             onChange={(value) =>
               void nativeRequest('settings.save', {
-                preferences: { renderScale: Number(value) },
+                preferences: value === 'fixed' ? { fixed1080p: true } : { fixed1080p: false, renderResolutionPercent: Number(value) },
               }).catch((error: Error) => notify(t(error.message)))
             }
           />
         </SettingRow>
+        <SettingRow title={t('解锁高刷新率')} description={t('下次启动游戏时请求屏幕支持的最高刷新率。配合 120 FPS 补丁使用，实际帧率取决于系统设置和游戏负载。')}>
+          <Switch
+            label={t('解锁高刷新率')}
+            checked={nativeState?.preferences.highRefreshRate !== false}
+            onChange={(highRefreshRate) => void nativeRequest('settings.save', { preferences: { highRefreshRate } })
+              .catch((error: Error) => notify(t(error.message)))}
+          />
+        </SettingRow>
+        {childLimit !== 'unsupported' && (
+          <SettingRow title={t('停止限制子进程')} description={[
+            t('在系统开发者选项中打开「停止限制子进程」，并保持开发者选项开启，以减少子进程被系统结束的情况。'),
+            t(childLimit === 'unrestricted' ? '已停止限制。' : childLimit === 'restricted' ? '系统仍在限制子进程。' : '请在系统设置中确认开关状态。'),
+          ].join(' ')}>
+            <Button variant="ghost" onClick={() => void nativeRequest<boolean>('system.developerOptions')
+              .then((direct) => { if (!direct) notify(t('请在系统设置中搜索开发者选项。')); })
+              .catch((error: Error) => notify(t(error.message)))}>
+              {t('打开开发者选项')}
+            </Button>
+          </SettingRow>
+        )}
         <SettingRow title={t('启动参数')} description={t('每行一个参数，在下一次启动生效。')}>
           <Button variant="ghost" onClick={() => showInfo('launch-args')}>
             {t('编辑参数')}
@@ -114,7 +150,9 @@ export function NativeControlsSettings() {
 
 export function NativeLayoutManagement() {
   const { t } = useTranslation();
+  const { openWorkspace, nativeState } = useLauncher();
   const [editing, setEditing] = useState(false);
+  const textures = useControlArtwork(nativeState, editing);
   return (
     <section className="settings-section">
       <h2>{t('控制管理')}</h2>
@@ -122,8 +160,11 @@ export function NativeLayoutManagement() {
         <SettingRow title={t('游戏布局')}>
           <Button onClick={() => setEditing(true)}>{t('编辑游戏布局')}</Button>
         </SettingRow>
+        <SettingRow title={t('控制布局包')}>
+          <Button onClick={() => openWorkspace('control-packs')}>{t('管理布局包')}</Button>
+        </SettingRow>
       </div>
-      {editing && <ControlsEditor onClose={() => setEditing(false)} />}
+      {editing && <ControlsEditor controlTextures={textures} onClose={() => setEditing(false)} />}
     </section>
   );
 }
@@ -139,6 +180,11 @@ export function NativeStorageSettings() {
             {t('查看目录')}
           </Button>
         </SettingRow>
+        <SettingRow title={t('存档备份')} description={t('备份或恢复当前实例中的角色和世界。')}>
+          <Button variant="ghost" onClick={() => showInfo('save-backups')}>
+            {t('管理备份')}
+          </Button>
+        </SettingRow>
         <SettingRow title={t('仅在 Wi-Fi 下下载')} description={t('启用后阻止使用计费网络下载。')}>
           <Switch
             label={t('仅在 Wi-Fi 下下载')}
@@ -150,7 +196,7 @@ export function NativeStorageSettings() {
             }
           />
         </SettingRow>
-        <SettingRow title={t('下载任务')} description={t('实际进度、取消与重试。')}>
+        <SettingRow title={t('下载任务')} description={t('查看进度，暂停或继续下载 tML 版本。')}>
           <Button variant="ghost" onClick={tasks}>
             {t('查看任务')}
           </Button>

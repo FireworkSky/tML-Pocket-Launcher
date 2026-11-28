@@ -12,7 +12,8 @@ namespace MobileJoystick;
 public class MobileResourceLayoutSystem : MobileSystem
 {
 	private static bool drawingHudBuffs;
-	private static bool ReserveToolbar => (MobileJoystickInput.EnabledThisFrame || MobileChatSystem.IsOpen) && MobileJoystickConfig.Instance.ShowTopButtons;
+	private static bool ReserveToolbar => !MobileJoystickInput.ControlsHidden
+		&& (MobileJoystickInput.EnabledThisFrame || MobileChatSystem.IsOpen && MobileJoystickConfig.Instance.ShowTopButtons);
 
 	public override void Load()
 	{
@@ -53,7 +54,7 @@ public class MobileResourceLayoutSystem : MobileSystem
 			int width = PlayerInput.RealScreenWidth, height = PlayerInput.RealScreenHeight;
 			Rectangle bounds = MobileJoystickLayout.GetToolbarButton(config, 0, width, height);
 			foreach (var button in MobileJoystickLayout.CreateControlsLayout(config, width, height).Buttons)
-				if (button.Action is MobileControlAction.Chat or MobileControlAction.Map or MobileControlAction.MapStyle
+				if (button.Action is MobileControlAction.Chat or MobileControlAction.Map or MobileControlAction.MapStyle or MobileControlAction.PerformanceDisplay
 					&& button.Bounds.Top < height / 4) bounds = Rectangle.Union(bounds, button.Bounds);
 			return bounds;
 		}

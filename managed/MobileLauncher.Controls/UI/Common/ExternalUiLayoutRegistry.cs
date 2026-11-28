@@ -51,12 +51,13 @@ internal sealed class ExternalUiLayoutAdapter
 		}
 	}
 
-	internal void Move(Vector2 center)
+	internal void Move(Vector2 center, bool clampToScreen = true)
 	{
 		Rectangle bounds = Bounds;
 		if (bounds.IsEmpty) return;
-		Vector2 half = bounds.Size() * .5f;
-		Vector2 clamped = Vector2.Clamp(center, half, new Vector2(PlayerInput.RealScreenWidth, PlayerInput.RealScreenHeight) - half);
+		Vector2 screen = new(Math.Max(1, PlayerInput.RealScreenWidth), Math.Max(1, PlayerInput.RealScreenHeight));
+		Vector2 half = Vector2.Min(bounds.Size(), screen) * .5f;
+		Vector2 clamped = clampToScreen ? Vector2.Clamp(center, half, screen - half) : center;
 		try { SetCenter(clamped); } catch { }
 	}
 
@@ -83,6 +84,7 @@ internal static class ExternalUiLayoutRegistry
 {
 	private static readonly Dictionary<string, ExternalUiLayoutAdapter> adapters = new(StringComparer.OrdinalIgnoreCase);
 	internal static IReadOnlyList<ExternalUiLayoutAdapter> Adapters => adapters.Values.OrderBy(adapter => adapter.Name, StringComparer.CurrentCultureIgnoreCase).ToArray();
+	internal static IEnumerable<ExternalUiLayoutAdapter> Registered => adapters.Values;
 
 	internal static bool Register(string id, string name, Func<bool> isVisible, Func<Rectangle> getBounds,
 		Action<Vector2> setCenter, Func<float> getScale, Action<float> setScale, Action save, Action<bool> setEditing, Action reset = null)

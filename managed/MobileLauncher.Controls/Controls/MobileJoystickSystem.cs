@@ -13,6 +13,7 @@ namespace MobileJoystick;
 
 public partial class MobileJoystickSystem : MobileSystem
 {
+	private IDisposable androidBackKeyboardHook;
 
 	public override void Load()
 	{
@@ -20,9 +21,11 @@ public partial class MobileJoystickSystem : MobileSystem
 			return;
 		}
 		MobileTouchInput.Load();
+		androidBackKeyboardHook = MobileKeyboardBindings.InstallBackInput();
 		On_Main.DoUpdate_HandleInput += MobileKeyboardBindings.HandleInput;
 		On_Main.DrawCursor += DrawNativeCursor;
 		On_Main.DrawThickCursor += DrawNativeCursorBorder;
+		On_Main.Draw += DrawTitleCursor;
 		On_Player.QuickGrapple += MobileJoystickInput.AimNativeGrapple;
 		On_Player.LookForTileInteractions += MobileWorldInteraction.LookForInteractions;
 		On_Player.ItemCheck += EnsureSmartCursorMiningInput;
@@ -35,8 +38,10 @@ public partial class MobileJoystickSystem : MobileSystem
 		MobileTouchInput.Unload();
 		if (!Main.dedServ) {
 			On_Main.DoUpdate_HandleInput -= MobileKeyboardBindings.HandleInput;
+			androidBackKeyboardHook?.Dispose();
 			On_Main.DrawCursor -= DrawNativeCursor;
 			On_Main.DrawThickCursor -= DrawNativeCursorBorder;
+			On_Main.Draw -= DrawTitleCursor;
 		}
 		if (!Main.dedServ) On_Player.QuickGrapple -= MobileJoystickInput.AimNativeGrapple;
 		if (!Main.dedServ) On_Player.LookForTileInteractions -= MobileWorldInteraction.LookForInteractions;
@@ -46,12 +51,12 @@ public partial class MobileJoystickSystem : MobileSystem
 		MobileJoystickInput.Reset();
 		NativeControlTheme.Unload();
 		UiTextureAssets.Unload();
-		ControlTexturePackSystem.Unload();
+		DefaultControlTextures.Unload();
 	}
 
 	public override void PostSetupContent()
 	{
-		if (!Main.dedServ) ControlTexturePackSystem.Load();
+		if (!Main.dedServ) DefaultControlTextures.Load();
 	}
 
 	public override void OnWorldUnload() { MobileJoystickInput.Reset(); MobileTouchInput.Reset(); MobileInteractionHighlight.Clear(); }
@@ -82,13 +87,38 @@ public partial class MobileJoystickSystem : MobileSystem
 		orig(player);
 	}
 
-	private static bool HideNativeCursor => MobileTouchInput.UsingTouch && MobileJoystickConfig.Instance?.EnableMobileControls == true;
+	private static bool HideNativeCursor => MobileJoystickConfig.Instance?.ShowMouseCursor != true;
+	private static bool drawTitleCursor;
+	private static bool CanDrawNativeCursor => !HideNativeCursor && (!Main.gameMenu || drawTitleCursor);
 	private static void DrawNativeCursor(On_Main.orig_DrawCursor orig, Vector2 bonus, bool smart)
 	{
-		if (!HideNativeCursor) orig(bonus, smart);
+		if (CanDrawNativeCursor) orig(bonus, smart);
 	}
 	private static Vector2 DrawNativeCursorBorder(On_Main.orig_DrawThickCursor orig, bool smart)
-		=> HideNativeCursor ? Vector2.Zero : orig(smart);
+		=> CanDrawNativeCursor ? orig(smart) : Vector2.Zero;
+
+	private static void DrawTitleCursor(On_Main.orig_Draw orig, Main main, GameTime time)
+	{
+		orig(main, time);
+		MobileKeyboardButton.Draw(Main.spriteBatch);
+		if (!Main.gameMenu || HideNativeCursor || TextureAssets.Cursors[0]?.IsLoaded != true) return;
+		Vector2 cursor = MobileTrackpad.ScreenPosition;
+		int oldX = Main.mouseX, oldY = Main.mouseY;
+		Main.spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp,
+			DepthStencilState.None, RasterizerState.CullCounterClockwise);
+		try {
+			drawTitleCursor = true;
+			Main.mouseX = (int)cursor.X;
+			Main.mouseY = (int)cursor.Y;
+			Main.DrawCursor(Main.DrawThickCursor());
+		}
+		finally {
+			drawTitleCursor = false;
+			Main.mouseX = oldX;
+			Main.mouseY = oldY;
+			Main.spriteBatch.End();
+		}
+	}
 
 	public override void ModifyInterfaceLayers(List<GameInterfaceLayer> layers)
 	{
@@ -121,6 +151,7 @@ public partial class MobileJoystickSystem : MobileSystem
 			"MobileJoystick: Mobile Touch Controls",
 			() => {
 				DrawControls();
+				MobilePerformanceHud.Draw(Main.spriteBatch);
 				return true;
 			},
 			InterfaceScaleType.None));
@@ -139,10 +170,12 @@ public partial class MobileJoystickSystem : MobileSystem
 		Color color = Color.White * config.Opacity;
 
         foreach (MobileControlStick stick in layout.Sticks) {
-			if (MobileJoystickInput.ControlsHidden || stick.Radius <= 0 || stick.Role == MobileJoystickRole.Grapple) continue;
+			if (!MobileJoystickInput.IsStickAvailable(stick) || stick.Role == MobileJoystickRole.Grapple) continue;
             bool moving = stick.Role == MobileJoystickRole.Move;
             bool active = moving ? MobileJoystickInput.MoveStick == stick : MobileJoystickInput.AimStick == stick;
             Vector2 offset = !active ? Vector2.Zero : moving ? MobileJoystickInput.JoystickVector : MobileJoystickInput.AttackKnobOffset;
+			if (CustomControlTextures.Draw(spriteBatch, stick.CustomTexture, stick.Center + offset * stick.Radius * .46f,
+				new Vector2(stick.Radius * 2), active ? Color.White : color)) continue;
 			NativeControlTheme.Stick(spriteBatch, stick.Role, stick.Center, stick.Radius, offset, color, active, textureName: stick.TextureName);
             if (moving && config.JoystickUpJumps)
                 NativeControlTheme.Legacy(spriteBatch, "MoveJumpHint", stick.Center - new Vector2(0, stick.Radius * .76f), 25f * layout.Scale, color);
@@ -151,7 +184,6 @@ public partial class MobileJoystickSystem : MobileSystem
 		foreach (MobileControlButton button in layout.Buttons) {
 			if (!MobileJoystickInput.IsButtonAvailable(button)) continue;
 			if (button.Launcher != null) { LauncherControlArtwork.Draw(spriteBatch, button, color); continue; }
-			if (MobileHudArtwork.DrawToolbar(button, MobileJoystickInput.IsActionDown(button.Action))) continue;
 			if (button.Id == null && button.Action is MobileControlAction.Inventory or MobileControlAction.Settings) {
 				continue;
 			}
@@ -159,8 +191,11 @@ public partial class MobileJoystickSystem : MobileSystem
 			bool active = button.Action switch {
 				MobileControlAction.ModKeybind => MobileModKeybinds.IsHeld(button.ModKeybind),
 				MobileControlAction.KeyboardKey => MobileKeyboardBindings.IsHeld(button.KeyboardKey),
+				MobileControlAction.PerformanceDisplay => MobilePerformanceHud.Visible,
 				_ => MobileJoystickInput.IsActionDown(button.Action)
 			};
+			if (CustomControlTextures.Draw(spriteBatch, button.CustomTexture, button.Center, new Vector2(button.Radius * 2), active ? Color.White : color)) continue;
+			if (MobileHudArtwork.DrawToolbar(button, MobileJoystickInput.IsActionDown(button.Action))) continue;
 			if (button.Action == MobileControlAction.KeyboardKey) {
 				DrawTexture(spriteBatch, button.TextureName, button.Center, button.Radius * 2f, active ? Color.White : color);
 				MobileKeyboardBindings.DrawLabel(spriteBatch, button.KeyboardKey, button.Center, button.Radius * 1.65f,
@@ -259,12 +294,15 @@ public partial class MobileJoystickSystem : MobileSystem
 		Color buttonColor = Color.White * (config?.Opacity ?? 0.78f);
 
 		if (config?.ControlLayout != MobileControlLayoutMode.Custom) {
-			DrawHotbarIcon(spriteBatch, layout.InventoryButton, "BackpackIcon", MobileJoystickInput.IsActionDown(MobileControlAction.Inventory), buttonColor);
-			DrawHotbarIcon(spriteBatch, layout.SettingsButton, "Settings", MobileJoystickInput.IsActionDown(MobileControlAction.Settings), buttonColor);
+			if (!MobileControlAvoidance.Obscures(layout.InventoryButton))
+				DrawHotbarIcon(spriteBatch, layout.InventoryButton, "BackpackIcon", MobileJoystickInput.IsActionDown(MobileControlAction.Inventory), buttonColor);
+			if (!MobileControlAvoidance.Obscures(layout.SettingsButton))
+				DrawHotbarIcon(spriteBatch, layout.SettingsButton, "Settings", MobileJoystickInput.IsActionDown(MobileControlAction.Settings), buttonColor);
 		}
 
 		for (int i = 0; i < 10; i++) {
 			Rectangle slot = layout.GetSlot(i);
+			if (MobileControlAvoidance.Obscures(slot)) continue;
 			bool selected = player.selectedItem == i;
 			Item item = player.inventory[i];
 			MobileInventorySystem.DrawMobileHotbarBackground(spriteBatch, slot, selected, item);
@@ -284,11 +322,6 @@ public partial class MobileJoystickSystem : MobileSystem
 
 	private void DrawHotbarIcon(SpriteBatch spriteBatch, Rectangle bounds, string textureName, bool active, Color color)
 	{
-		if (ControlTexturePackSystem.UseRalDefaults) {
-			MobileControlArtwork.DrawButton(spriteBatch, textureName == "Settings" ? MobileControlAction.Settings : MobileControlAction.Inventory,
-				bounds.Center.ToVector2(), Math.Min(bounds.Width, bounds.Height) / 2f, color, active);
-			return;
-		}
 		DrawTexture(spriteBatch, textureName, bounds.Center.ToVector2(), bounds.Width * (active ? 0.88f : 0.8f), active ? Color.White : color);
 	}
 

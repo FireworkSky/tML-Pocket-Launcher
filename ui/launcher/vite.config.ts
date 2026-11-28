@@ -7,6 +7,7 @@ export default defineConfig({
     target: 'es2022',
     sourcemap: true,
     rollupOptions: {
+      input: ['index.html', 'game.html'],
       output: {
         manualChunks(id) {
           if (/\/node_modules\/(react|react-dom|scheduler)\//.test(id)) return 'react-vendor';

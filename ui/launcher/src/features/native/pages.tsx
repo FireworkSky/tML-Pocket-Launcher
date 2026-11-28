@@ -4,9 +4,12 @@ import { useWorkspaceActions, tools } from '../home';
 import { nativeRequest } from '../../native/bridge';
 import { Announcements } from '../announcements';
 import { useLauncher } from '../../state/launcher';
+import { useDownloads } from './download-state';
 
 export function NativeHomePage() {
   const { t } = useTranslation();
+  const { activeCount } = useDownloads();
+  const { notify } = useLauncher();
   const {
     state,
     nativeState: status,
@@ -45,6 +48,17 @@ export function NativeHomePage() {
   ];
   return (
     <>
+      {status?.storageGranted === false && (
+        <div className="info-strip">
+          <Icon name="folder" />
+          <span>{t('授予文件访问权限后，将自动创建共享游戏目录和模组文件夹。')}</span>
+          <Button
+            onClick={() => void nativeRequest('files.permission').catch((error: Error) => notify(error.message))}
+          >
+            {t('授予文件访问权限')}
+          </Button>
+        </div>
+      )}
       <Announcements />
       <div className="home-workspace">
         <section className="panel game-overview setup-panel" aria-label={t('tModLoader 游戏状态')}>
@@ -117,8 +131,8 @@ export function NativeHomePage() {
             <span>{t('可选补丁')}</span>
           </Button>
           <Button onClick={tasks}>
-            <strong>{status?.busy ? 1 : 0}</strong>
-            <span>{t('当前任务')}</span>
+            <strong>{activeCount}</strong>
+            <span>{t('下载任务')}</span>
           </Button>
         </div>
       </section>
@@ -236,7 +250,7 @@ export function NativePatchesPage() {
           content: (
             <>
               {list(optional)}
-              <p className="list-caption">{t('更改在下次启动生效 · 联机托管仅支持已适配的版本')}</p>
+              <p className="list-caption">{t('更改在下次启动生效')}</p>
             </>
           ),
         },

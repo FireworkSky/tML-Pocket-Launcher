@@ -8,6 +8,7 @@ namespace MobileJoystick;
 public partial class MobileInventorySystem
 {
 	private bool guideSession, guideQuery;
+	private int pageBeforeGuide;
 	private readonly Item[] guideSlot = { new Item() };
 	private static bool TalkingToGuide => Main.LocalPlayer.talkNPC >= 0 && Main.LocalPlayer.talkNPC < Main.maxNPCs
 		&& Main.npc[Main.LocalPlayer.talkNPC] is { active: true, type: NPCID.Guide };
@@ -27,6 +28,7 @@ public partial class MobileInventorySystem
 		if (guideSession) return;
 		guideSession = guideQuery = true;
 		guideSlot[0] = Main.guideItem;
+		pageBeforeGuide = rightPage;
 		rightPage = 0;
 		nativeView = false;
 		recipeStart = 0;
@@ -43,6 +45,7 @@ public partial class MobileInventorySystem
 		if (!guideQuery && !guideSlot[0].IsAir) Main.guideItem = guideSlot[0];
 		guideSlot[0] = new Item();
 		guideSession = guideQuery = false;
+		rightPage = pageBeforeGuide;
 		Main.InGuideCraftMenu = false;
 		Main.LocalPlayer.dropItemCheck();
 		CancelInventoryGesture();
@@ -52,7 +55,11 @@ public partial class MobileInventorySystem
 
 	private void DrawGuideMode()
 	{
-		if (!guideSession) return;
+		if (TextButton(layout.RightTabDefault(0), "×")) {
+			Main.LocalPlayer.SetTalkNPC(-1);
+			CloseGuideSession();
+			return;
+		}
 		if (TextButton(GuideModeButton, T(guideQuery ? "SwitchToCrafting" : "SwitchToGuideQuery"), guideQuery)) SwitchGuideMode();
 	}
 
@@ -70,6 +77,7 @@ public partial class MobileInventorySystem
 
 	private void DrawGuideQuerySlot()
 	{
+		guideSlot[0] = Main.guideItem;
 		Slot(guideSlot, ItemSlot.Context.GuideItem, 0, layout.CraftAction);
 		SyncGuideQuerySlot();
 		Text(T("GuideQuery"), layout.CraftAt(4, 324, 62, 24), .65f);

@@ -54,9 +54,11 @@ public partial class MobileMinimapSystem
 			DepthStencilState.None, RasterizerState.CullCounterClockwise);
 		foreach (var button in MobileJoystickInput.CreateMapLayout(MobileJoystickConfig.Instance).Buttons) {
 			bool pressed = MobileJoystickInput.IsActionDown(button.Action);
+			Color color = Color.White * (pressed ? 1 : .78f);
+			if (CustomControlTextures.Draw(Main.spriteBatch, button.CustomTexture, button.Center, new Vector2(button.Radius * 2), color)) continue;
 			if (MobileHudArtwork.DrawToolbar(button, pressed)) continue;
 			MobileControlArtwork.DrawButton(Main.spriteBatch, button.Action, button.Center, button.Radius,
-				Color.White * (pressed ? 1 : .78f), pressed, textureName: button.TextureName);
+				color, pressed, textureName: button.TextureName);
 		}
 	}
 }

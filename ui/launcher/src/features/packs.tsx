@@ -197,7 +197,7 @@ export function PacksPanel() {
           symbol="mod"
           title={t('保存一套模组组合')}
           description={t(
-            '保存启用清单，方便切换、分享或补齐缺失模组。这里的清单不包含 .tmod 文件。',
+            '保存启用清单，方便切换、分享或补齐缺失模组。清单只记录模组名称和配置信息。',
           )}
         />
       )}

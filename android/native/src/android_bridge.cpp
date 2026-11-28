@@ -1,5 +1,6 @@
 #include "android_bridge.hpp"
 
+#include <atomic>
 #include <deque>
 #include <mutex>
 #include <string>
@@ -25,6 +26,8 @@ std::mutex g_bridge_mutex;
 jobject g_activity = nullptr;
 jclass g_bridge_class = nullptr;
 std::deque<QueuedAndroidEvent> g_queued_events;
+std::atomic_bool g_back_requested{false};
+std::atomic_bool g_keyboard_requested{false};
 thread_local std::string g_last_event_text;
 thread_local std::string g_last_clipboard_text;
 
@@ -210,6 +213,8 @@ Java_app_com_tmlpocket_core_platform_NativeCoreClr_nativeClearBridgeActivity(
         g_bridge_class = nullptr;
     }
     g_queued_events.clear();
+    g_back_requested.store(false);
+    g_keyboard_requested.store(false);
 }
 
 extern "C" JNIEXPORT void JNICALL
@@ -229,6 +234,14 @@ Java_app_com_tmlpocket_core_platform_NativeCoreClr_nativePostAndroidEvent(
     jboolean paused,
     jint request_code,
     jboolean granted) {
+    if (kind == TML_POCKET_ANDROID_EVENT_BACK) {
+        g_back_requested.store(true);
+        return;
+    }
+    if (kind == TML_POCKET_ANDROID_EVENT_KEYBOARD_REQUEST) {
+        g_keyboard_requested.store(true);
+        return;
+    }
     std::string text_value;
     if (text != nullptr) {
         const char* chars = env->GetStringUTFChars(text, nullptr);
@@ -358,6 +371,15 @@ extern "C" int tml_pocket_bridge_set_startup_status(
         progress_percent);
 }
 
+extern "C" void tml_pocket_bridge_report_frame_rate(int fps) {
+    JNIEnv* env = mobile_launcher_get_env();
+    if (env == nullptr) return;
+    jvalue arguments[1]{};
+    arguments[0].i = fps;
+    call_int(env, "reportFrameRate", "(I)I", arguments);
+    mobile_launcher_detach_current_thread();
+}
+
 extern "C" int tml_pocket_bridge_hide_startup_status() {
     JNIEnv* env = mobile_launcher_get_env();
     if (env == nullptr) return -1;
@@ -409,4 +431,12 @@ extern "C" int tml_pocket_bridge_poll_event(TmlPocketAndroidEvent* event) {
     *event = queued.event;
     event->text = g_last_event_text.empty() ? nullptr : g_last_event_text.c_str();
     return 1;
+}
+
+extern "C" int tml_pocket_bridge_take_back() {
+    return g_back_requested.exchange(false) ? 1 : 0;
+}
+
+extern "C" int tml_pocket_bridge_take_keyboard_request() {
+    return g_keyboard_requested.exchange(false) ? 1 : 0;
 }

@@ -66,6 +66,10 @@ public partial class MobileMenuSystem : MobileSystem
 	private readonly MobileInterfaceLayoutEditor interfaceEditor = new();
 	private bool interfaceRegionDragging, interfaceRegionSizing;
 	private bool interfaceScaleDragging;
+	private bool interfaceToolbarHidden;
+	private bool interfaceToolbarPressed, interfaceToolbarDragging;
+	private Vector2? interfaceToolbarCenter;
+	private Vector2 interfaceToolbarGrabOffset;
 	private Vector2 interfaceGestureStart, interfaceGestureCenter;
 	private float interfaceGestureScale;
 	private int interfaceGestureWidth;
@@ -80,7 +84,7 @@ public partial class MobileMenuSystem : MobileSystem
 		MobileControlAction.Mana, MobileControlAction.QuickMount, MobileControlAction.Loadout2,
 		MobileControlAction.AutoSelect, MobileControlAction.ZoomIn, MobileControlAction.Loadout3,
 		MobileControlAction.Unbound, MobileControlAction.ZoomOut, MobileControlAction.SwitchLoadout,
-		MobileControlAction.ToggleGameControls
+		MobileControlAction.ToggleGameControls, MobileControlAction.TogglePointerMode, MobileControlAction.PerformanceDisplay, MobileControlAction.ShowKeyboard
 	};
 	private bool draggingLeftStick, draggingRightStick;
 	private Vector2 dragStartPointer;
@@ -99,6 +103,10 @@ public partial class MobileMenuSystem : MobileSystem
 		}
 	}
 	internal static bool EditingInterfaceLayout => MobileControlsSession.Get<MobileMenuSystem>().interfaceEditor.IsOpen;
+	internal static bool IsPauseMenuOpen => Main.ingameOptionsWindow
+		&& MobileControlsSession.Get<MobileMenuSystem>() is { session: true, page: Page.Pause };
+	internal static bool UsesDirectEditorTouch => Main.ingameOptionsWindow
+		&& MobileControlsSession.Get<MobileMenuSystem>().page is Page.TouchEditor or Page.InterfaceEditor;
 	internal static MobileInterfaceLayoutProfile InterfaceLayoutDraft => MobileControlsSession.Get<MobileMenuSystem>().interfaceEditor.Draft;
 
 	public override void Load()
@@ -150,6 +158,7 @@ public partial class MobileMenuSystem : MobileSystem
 
 	private void Open(On_IngameOptions.orig_Open orig)
 	{
+		interfaceEditor.CaptureBeforePause();
 		orig();
 		if (!UiTextureAssets.Available || MobileJoystickConfig.Instance?.EnableMobileControls != true) return;
 		session = true;
@@ -225,6 +234,7 @@ public partial class MobileMenuSystem : MobileSystem
 		interfaceEditor.Open(MobileJoystickConfig.Instance?.InterfaceLayout);
 		interfaceRegionDragging = interfaceRegionSizing = false;
 		interfaceScaleDragging = false;
+		interfaceToolbarHidden = false;
 		page = Page.InterfaceEditor;
 		consumed = true;
 		ClickSound();
@@ -250,7 +260,6 @@ public partial class MobileMenuSystem : MobileSystem
 
 	private void Back()
 	{
-		if (launcherPropertyPath != null) { EndLauncherPropertyEdit(); return; }
 		if (page == Page.InterfaceEditor) { interfaceEditor.Close(); page = Page.Settings; Settings(1); return; }
 		if (!Save()) return;
 		if (page == Page.Settings && category >= 8) { Settings(category == 8 ? 7 : 4); return; }
@@ -313,6 +322,7 @@ public partial class MobileMenuSystem : MobileSystem
 		touchId = -1;
 		slider = dropdown = null;
 		scrolling = false;
+		interfaceToolbarPressed = interfaceToolbarDragging = false;
 	}
 
 	private void ReadPointer()
@@ -431,11 +441,18 @@ public partial class MobileMenuSystem : MobileSystem
 		MobileJoystickConfig config = MobileJoystickConfig.Instance;
 		int inset = Math.Max(4, (int)((config?.EdgePadding ?? 18) * MobileJoystickLayout.GetControlScale(config, width, height) * .5f));
 		int safeTop = Math.Max(inset, (int)(8 * s));
-		int safeBottom = dock.Top - (int)(8 * s);
+		int safeBottom = height - safeTop;
 		interfaceEditor.HotbarEditorBounds = new Rectangle(inset, safeTop, Math.Max(1, width - inset * 2), Math.Max(1, safeBottom - safeTop));
-		interfaceHeaderArea = Rectangle.Empty;
+		Rectangle toolbarToggle = UpdateInterfaceToolbarToggle(width, height, s, safeTop, dock);
+		interfaceHeaderArea = toolbarToggle;
+		interfaceFooterArea = interfaceToolbarHidden ? Rectangle.Empty : dock;
+		if (interfaceToolbarHidden) {
+			DrawInterfaceLayoutPreview(sb, width, height, draft);
+			DrawInterfaceToolbarToggle(sb, toolbarToggle);
+			UpdateInterfaceRegionGesture(width, height, s);
+			return;
+		}
 
-		interfaceFooterArea = dock;
 		Nine(sb, "EditorSelected", dock, new Color(188, 198, 215, 238), 10);
 		int left = dock.X + (int)(8 * s);
 		int right = dock.X + (int)(408 * s);
@@ -468,13 +485,11 @@ public partial class MobileMenuSystem : MobileSystem
 		if (Hit(redo) && interfaceEditor.CanRedo) interfaceEditor.Redo();
 		Label(sb, T("InterfaceLayoutEditor"), new Rectangle(left, rowTwoY, (int)(160 * s), (int)(40 * s)), .62f, display: true);
 
-		if (interfaceEditor.ExternalView) DrawExternalUiLayoutPreview(sb, width, height);
-		else if (!interfaceEditor.InventoryView) DrawHotbarLayoutPreview(sb, width, height, draft);
-		else DrawInventoryLayoutPreview(sb, width, height, draft);
+		DrawInterfaceLayoutPreview(sb, width, height, draft);
 
 		Rectangle selectedNameBounds = new(left + (int)(160 * s), rowTwoY, (int)(260 * s), (int)(40 * s));
 		string selectedName = interfaceEditor.ExternalView
-			? interfaceEditor.SelectedExternalUi?.Name ?? T("NoCompatibleModUI")
+			? interfaceEditor.SelectedExternalUi?.Name ?? T("NoEditableModUi")
 			: InterfaceRegionName(interfaceEditor.Selected);
 		Label(sb, selectedName, selectedNameBounds, .54f, true, display: true);
 		if (interfaceEditor.ExternalView && Hit(selectedNameBounds)) CycleExternalUiSelection();
@@ -512,7 +527,7 @@ public partial class MobileMenuSystem : MobileSystem
 		Rectangle scaleHit = new(interfaceScaleSlider.X - (int)(12 * s), interfaceScaleSlider.Y - (int)(18 * s), interfaceScaleSlider.Width + (int)(24 * s), interfaceScaleSlider.Height + (int)(36 * s));
 		if (canScale && pressed && scaleHit.Contains(pointer.ToPoint())) {
 			interfaceScaleDragging = true;
-			if (!interfaceEditor.ExternalView) interfaceEditor.BeginGesture();
+			interfaceEditor.BeginGesture();
 			consumed = true;
 		}
 		if (interfaceScaleDragging && down) {
@@ -522,25 +537,140 @@ public partial class MobileMenuSystem : MobileSystem
 			consumed = true;
 		}
 		if (released || !down) interfaceScaleDragging = false;
+		DrawInterfaceToolbarToggle(sb, toolbarToggle);
 		UpdateInterfaceRegionGesture(width, height, s);
 	}
 
-	private void DrawExternalUiLayoutPreview(SpriteBatch sb, int width, int height)
+	private void DrawInterfaceToolbarToggle(SpriteBatch sb, Rectangle bounds)
+	{
+		DrawEditorSurface(sb, bounds);
+		Label(sb, T(interfaceToolbarHidden ? "ShowLayoutToolbar" : "HideLayoutToolbar"), bounds, .66f, true, display: true);
+	}
+
+	private Rectangle UpdateInterfaceToolbarToggle(int width, int height, float scale, int inset, Rectangle dock)
+	{
+		int buttonWidth = Math.Max(1, (int)(132 * scale));
+		int buttonHeight = Math.Max(1, (int)(40 * scale));
+		Vector2 halfSize = new(buttonWidth * .5f, buttonHeight * .5f);
+		Vector2 viewport = new(width, height);
+		Vector2 minCenter = new Vector2(inset) + halfSize;
+		Vector2 maxCenter = Vector2.Max(minCenter, viewport - new Vector2(inset) - halfSize);
+		Rectangle Bounds(Vector2 center)
+		{
+			center = Vector2.Clamp(center, minCenter, maxCenter);
+			var bounds = new Rectangle((int)(center.X - halfSize.X), (int)(center.Y - halfSize.Y), buttonWidth, buttonHeight);
+			if (!interfaceToolbarHidden && bounds.Intersects(dock))
+				bounds.Y = Math.Max(inset, dock.Top - buttonHeight);
+			return bounds;
+		}
+
+		Vector2 center = interfaceToolbarCenter is Vector2 position
+			? position * viewport : new Vector2(width * .5f, minCenter.Y);
+		Rectangle target = Bounds(center);
+		if (pressed && !editorInputBlocked && target.Contains(pressPosition.ToPoint())) {
+			interfaceToolbarPressed = true;
+			interfaceToolbarDragging = false;
+			interfaceToolbarGrabOffset = target.Center.ToVector2() - pressPosition;
+		}
+		if (!interfaceToolbarPressed) return target;
+
+		consumed = true;
+		float dragThreshold = Math.Max(5f, 8f * scale);
+		if ((down || released) && Vector2.DistanceSquared(pressPosition, pointer) >= dragThreshold * dragThreshold)
+			interfaceToolbarDragging = true;
+		if (interfaceToolbarDragging && (down || released)) {
+			target = Bounds(pointer + interfaceToolbarGrabOffset);
+			interfaceToolbarCenter = target.Center.ToVector2() / viewport;
+		}
+		if (released && !interfaceToolbarDragging && target.Contains(pointer.ToPoint())) {
+			interfaceToolbarHidden = !interfaceToolbarHidden;
+			target = Bounds(center);
+			ClickSound();
+		}
+		if (!down || released) interfaceToolbarPressed = interfaceToolbarDragging = false;
+		return target;
+	}
+
+	private void DrawInterfaceLayoutPreview(SpriteBatch sb, int width, int height, MobileInterfaceLayoutProfile draft)
+	{
+		if (interfaceEditor.ExternalView) DrawExternalUiLayoutPreview(sb, width, height, interfaceFooterArea);
+		else if (interfaceEditor.InventoryView) DrawInventoryLayoutPreview(sb, width, height, draft);
+		else DrawHotbarLayoutPreview(sb, width, height, draft);
+	}
+
+	private void DrawExternalUiLayoutPreview(SpriteBatch sb, int width, int height, Rectangle dock)
 	{
 		IReadOnlyList<ExternalUiLayoutAdapter> adapters = ExternalUiLayoutRegistry.Adapters;
-		if (adapters.Count == 0) {
-			Label(sb, T("NoCompatibleExternalModUIIsAvailable"),
+		IReadOnlyList<ExternalUiBounds> panels = interfaceEditor.PreviewPanels();
+		if (adapters.Count == 0 && panels.Count == 0) {
+			Label(sb, T("OpenModPanelForLayoutPreview"),
 				new Rectangle(0, height / 3, width, (int)(42 * layout.Scale)), .8f, true, new Color(225, 230, 240));
 			return;
 		}
+		DrawModUiConflicts(sb, width, height, panels);
+		foreach (var panel in panels)
+			if (panel.AdapterId == null)
+				DrawInterfaceRegion(sb, panel.Name, panel.Bounds, false, false, new Color(194, 184, 225));
+
 		foreach (ExternalUiLayoutAdapter adapter in adapters) {
 			bool visible = adapter.Visible;
-			if (!visible && adapter.Id != interfaceEditor.SelectedExternalUiId) continue;
+			if (!visible && !interfaceEditor.WasPanelVisible(adapter.Id) && adapter.Id != interfaceEditor.SelectedExternalUiId) continue;
 			bool selected = adapter.Id == interfaceEditor.SelectedExternalUiId;
 			string name = visible ? adapter.Name : adapter.Name + T("DisplayConditionsNotMet");
 			Rectangle bounds = adapter.Bounds;
 			if (adapter.Id == MobileCalamityUiSystem.DifficultyAdapterId) MobileCalamityUiSystem.DrawDifficultyPreview(sb, bounds);
 			DrawInterfaceRegion(sb, name, bounds, selected, selected && adapter.CanScale);
+		}
+		for (int i = 0; i < panels.Count; i++) {
+			for (int j = i + 1; j < panels.Count; j++) {
+				if (panels[i].Name == panels[j].Name) continue;
+				Rectangle overlap = Rectangle.Intersect(panels[i].Bounds, panels[j].Bounds);
+				if (overlap.Width > 0 && overlap.Height > 0)
+					sb.Draw(TextureAssets.MagicPixel.Value, overlap, new Color(255, 111, 88) * .35f);
+			}
+		}
+		if (dock.IsEmpty) return;
+		int legendHeight = Math.Max(24, (int)(30 * layout.Scale));
+		var legend = new Rectangle(dock.X, dock.Top - legendHeight - 4, dock.Width, legendHeight);
+		interfaceHeaderArea = legend;
+		sb.Draw(TextureAssets.MagicPixel.Value, legend, new Color(31, 40, 57, 232));
+		Label(sb, T("ModUiConflictLegend"), legend, .58f, true, Color.White);
+	}
+
+	private void DrawModUiConflicts(SpriteBatch sb, int width, int height, IReadOnlyList<ExternalUiBounds> panels)
+	{
+		MobileJoystickConfig config = MobileJoystickConfig.Instance;
+		if (config == null || config.HideGameControls) return;
+		MobileControlLayout controls = MobileJoystickLayout.CreateControlsLayout(config, width, height);
+		MobileHotbarLayout hotbar = MobileJoystickLayout.CreateHotbarLayout(config, width, height, true, interfaceEditor.Draft);
+		foreach (var button in controls.Buttons) {
+			if (button.Id == null && button.Action is MobileControlAction.Inventory or MobileControlAction.Settings) continue;
+			DrawControlOverlap(sb, MobileControlAvoidance.Bounds(button), panels, button);
+		}
+		foreach (var stick in controls.Sticks) {
+			if (stick.Radius <= 0f || stick.Role == MobileJoystickRole.Grapple) continue;
+			DrawControlOverlap(sb, MobileControlAvoidance.Bounds(stick.Center, new Vector2(stick.Radius)), panels, stick: stick);
+		}
+		for (int i = 0; i < MobileHotbarLayout.SlotCount; i++)
+			DrawControlOverlap(sb, hotbar.GetSlot(i), panels);
+		if (config.ControlLayout != MobileControlLayoutMode.Custom) {
+			DrawControlOverlap(sb, hotbar.InventoryButton, panels);
+			DrawControlOverlap(sb, hotbar.SettingsButton, panels);
+		}
+	}
+
+	private static void DrawControlOverlap(SpriteBatch sb, Rectangle bounds, IReadOnlyList<ExternalUiBounds> panels,
+		MobileControlButton? button = null, MobileControlStick? stick = null)
+	{
+		if (bounds.Width < 1 || bounds.Height < 1) return;
+		Texture2D pixel = TextureAssets.MagicPixel.Value;
+		sb.Draw(pixel, bounds, Color.White * .12f);
+		foreach (var panel in panels) {
+			Rectangle overlap = Rectangle.Intersect(bounds, panel.Bounds);
+			if (overlap.Width <= 0 || overlap.Height <= 0) continue;
+			if (button.HasValue && !MobileControlAvoidance.Overlaps(button.Value, panel.Bounds)) continue;
+			if (stick.HasValue && !MobileControlAvoidance.CircleOverlaps(stick.Value.Center, stick.Value.Radius, panel.Bounds)) continue;
+			sb.Draw(pixel, overlap, new Color(255, 111, 88) * .60f);
 		}
 	}
 
@@ -593,10 +723,10 @@ public partial class MobileMenuSystem : MobileSystem
 	private void DrawInterfaceRegion(SpriteBatch sb, MobileInterfaceRegion region, Rectangle bounds, int width, int height)
 		=> DrawInterfaceRegion(sb, InterfaceRegionName(region), bounds, interfaceEditor.Selected == region, true);
 
-	private void DrawInterfaceRegion(SpriteBatch sb, string name, Rectangle bounds, bool selected, bool canScale)
+	private void DrawInterfaceRegion(SpriteBatch sb, string name, Rectangle bounds, bool selected, bool canScale, Color? accent = null)
 	{
 		if (bounds.IsEmpty) return;
-		Color color = selected ? new Color(255, 219, 106) : new Color(117, 205, 228);
+		Color color = accent ?? (selected ? new Color(255, 219, 106) : new Color(117, 205, 228));
 		sb.Draw(TextureAssets.MagicPixel.Value, bounds, color * (selected ? .12f : .055f));
 		int edge = Math.Max(2, (int)(3 * layout.Scale));
 		sb.Draw(TextureAssets.MagicPixel.Value, new Rectangle(bounds.Left, bounds.Top, bounds.Width, edge), color);
@@ -660,11 +790,11 @@ public partial class MobileMenuSystem : MobileSystem
 	private void UpdateExternalUiGesture(int width, int height, float scale)
 	{
 		if (pressed && !consumed) {
-			if (interfaceFooterArea.Contains(pressPosition.ToPoint())) return;
+			if (interfaceFooterArea.Contains(pressPosition.ToPoint()) || interfaceHeaderArea.Contains(pressPosition.ToPoint())) return;
 			IReadOnlyList<ExternalUiLayoutAdapter> adapters = ExternalUiLayoutRegistry.Adapters;
 			for (int i = adapters.Count - 1; i >= 0; i--) {
 				ExternalUiLayoutAdapter adapter = adapters[i];
-				if (!adapter.Visible && adapter.Id != interfaceEditor.SelectedExternalUiId) continue;
+				if (!adapter.Visible && !interfaceEditor.WasPanelVisible(adapter.Id) && adapter.Id != interfaceEditor.SelectedExternalUiId) continue;
 				Rectangle bounds = adapter.Bounds;
 				if (!bounds.Contains(pressPosition.ToPoint())) continue;
 				interfaceEditor.CaptureExternalSelection(adapter.Id);
@@ -676,6 +806,7 @@ public partial class MobileMenuSystem : MobileSystem
 				Rectangle handle = new(bounds.Right - (int)handleSize, bounds.Bottom - (int)handleSize, (int)handleSize, (int)handleSize);
 				interfaceRegionSizing = adapter.CanScale && handle.Contains(pressPosition.ToPoint());
 				interfaceRegionDragging = !interfaceRegionSizing;
+				interfaceEditor.BeginGesture();
 				consumed = true;
 				break;
 			}
@@ -775,7 +906,7 @@ public partial class MobileMenuSystem : MobileSystem
 		int height = PlayerInput.RealScreenHeight;
 		bool editingCustom = touchEditorTab == 2 && touchEditorView != TouchEditorView.Overview;
 		if (editingCustom) MobileInventorySystem.DrawControlEditorBackdrop(sb, width, height);
-		editorInputBlocked = touchEditorView is TouchEditorView.ActionPicker or TouchEditorView.CopyPicker || presetPickerOpen || launcherPropertyPath != null;
+		editorInputBlocked = touchEditorView is TouchEditorView.ActionPicker or TouchEditorView.CopyPicker || presetPickerOpen;
 		bool modalBlocked = editorInputBlocked;
 		if (editingCustom && SelectedCustomControl() is { } propertyOwner && CustomPropertyBounds(propertyOwner).Contains(pressPosition.ToPoint())) editorInputBlocked = true;
 		touchEditorPanel = new((width - (int)(536 * s)) / 2, (int)(14 * s), (int)(536 * s), (int)((editingCustom ? 126 : 200) * s));
@@ -866,23 +997,6 @@ public partial class MobileMenuSystem : MobileSystem
 		}
 		else Label(sb, T("Edit"), edit, .76f, true, display: true);
 		if (Hit(edit)) BeginCustomEdit();
-		if (!presetPickerOpen) DrawTexturePackChoice(sb);
-	}
-
-	private void DrawTexturePackChoice(SpriteBatch sb)
-	{
-		IReadOnlyList<(string Id, string Name)> packs = ControlTexturePackSystem.AvailablePacks();
-		if (packs.Count == 0) return;
-		Rectangle row = EditorAt(62, 112, 404, 36);
-		DrawEditorSurface(sb, row, true);
-		Label(sb, T("ControlTexturePack"), new Rectangle(row.X + 10, row.Y, row.Width / 2, row.Height), .66f);
-		string name = packs.FirstOrDefault(pack => pack.Id == ControlTexturePackSystem.ActivePackId).Name ?? packs[0].Name;
-		Label(sb, name, new Rectangle(row.X + row.Width / 2, row.Y, row.Width / 2 - 12, row.Height), .66f, true, Color.White);
-		DrawEditorDropdownArrow(sb, row);
-		if (!Hit(row)) return;
-		int index = packs.ToList().FindIndex(pack => pack.Id == ControlTexturePackSystem.ActivePackId);
-		var next = packs[(index + 1 + packs.Count) % packs.Count];
-		if (!ControlTexturePackSystem.SetActivePack(next.Id)) Main.NewText(T("CouldNotLoadTexturePackCurrentArtworkWasKept"));
 	}
 
 	private void DrawCustomPresetPicker(SpriteBatch sb)
@@ -946,7 +1060,7 @@ public partial class MobileMenuSystem : MobileSystem
 
 	private void DrawCustomAddModes(SpriteBatch sb, int width, int height)
 	{
-		Rectangle panel = EditorScreenAt(0, 136, 536, 108);
+		Rectangle panel = EditorScreenAt(0, 136, 536, 60);
 		DrawEditorPanel(sb, panel);
 		Rectangle joystick = EditorScreenAt(10, 145, 172, 44);
 		Rectangle button = EditorScreenAt(182, 145, 172, 44);
@@ -957,13 +1071,6 @@ public partial class MobileMenuSystem : MobileSystem
 		if (Hit(joystick)) SelectCustomAddTool(MobileCustomControlKind.Joystick);
 		if (Hit(button)) SelectCustomAddTool(MobileCustomControlKind.Button);
 		if (Hit(radial)) SelectCustomAddTool(MobileCustomControlKind.RadialMenu);
-		MobileCustomControlKind[] extraKinds = { MobileCustomControlKind.DPad, MobileCustomControlKind.Touchpad, MobileCustomControlKind.Mousewheel, MobileCustomControlKind.Text };
-		for (int i = 0; i < extraKinds.Length; i++) {
-			Rectangle option = EditorScreenAt(10 + i * 129, 192, 126, 42);
-			DrawEditorSurface(sb, option, addControlKind == extraKinds[i]);
-			Label(sb, LauncherKindLabel(extraKinds[i]), option, .62f, true);
-			if (Hit(option)) SelectCustomAddTool(extraKinds[i]);
-		}
 		string instruction = addControlKind switch {
 			MobileCustomControlKind.Joystick => T("TapAnywhereToAddANewJoystick"),
 			MobileCustomControlKind.Button => T("TapAnywhereToAddANewButton"),
@@ -971,13 +1078,12 @@ public partial class MobileMenuSystem : MobileSystem
 			_ => T("TapAnyControlToEditItOrHoldAndDragToMoveIt")
 		};
 		Label(sb, instruction,
-			EditorScreenAt(-80, 250, 696, 38), .7f, true);
+			EditorScreenAt(-80, 202, 696, 38), .7f, true);
 	}
 
 	private void SelectCustomAddTool(MobileCustomControlKind kind)
 	{
 		addControlKind = kind;
-		EndLauncherPropertyEdit();
 		selectedControlId = null;
 		selectedRadialSlot = -1;
 		editorDragging = editorSizing = editorGestureChanged = false;
@@ -1006,9 +1112,11 @@ public partial class MobileMenuSystem : MobileSystem
 			if (held) opacity = 1f;
 			if (control.Launcher != null) {
 				LauncherControlArtwork.Draw(sb, new MobileControlButton(MobileControlAction.LauncherControl, "", center, radius, control.Id,
-					launcher: control.Launcher, dimensions: control.Launcher.Dimensions(PlayerInput.RealScreenHeight, control.Size)), Color.White * opacity, selected);
+					launcher: control.Launcher, dimensions: control.Launcher.Dimensions(PlayerInput.RealScreenHeight, control.Size),
+					customTexture: control.CustomTexture), Color.White * opacity, selected);
 				continue;
 			}
+			if (CustomControlTextures.Draw(sb, control.CustomTexture, center, new Vector2(radius * 2), color * opacity)) continue;
 			if (control.Kind == MobileCustomControlKind.Joystick) {
                 NativeControlTheme.Stick(sb, control.JoystickRole, center, radius,
                     PreviewStickOffset(center, radius), color * opacity, held, selected, control.TextureName);
@@ -1102,7 +1210,7 @@ public partial class MobileMenuSystem : MobileSystem
 	{
 		float s = layout.Scale;
 		int width = (int)(440 * s);
-		int height = (int)((control.Launcher != null ? 300 : control.Kind == MobileCustomControlKind.RadialMenu ? 382 : control.Kind == MobileCustomControlKind.Joystick ? 256 : 304) * s);
+		int height = (int)((control.Launcher != null ? 108 : control.Kind == MobileCustomControlKind.RadialMenu ? 284 : control.Kind == MobileCustomControlKind.Joystick ? 156 : 204) * s);
 		float radius = CustomControlRadius(control) * (control.Kind == MobileCustomControlKind.RadialMenu ? 2.8f : 1f);
 		Vector2 center = MobileJoystickLayout.GetCustomControlCenter(control, PlayerInput.RealScreenWidth, PlayerInput.RealScreenHeight, radius);
 		float cx = center.X;
@@ -1148,7 +1256,6 @@ public partial class MobileMenuSystem : MobileSystem
 	{
 		MobileCustomControl control = SelectedCustomControl();
 		if (control == null || touchEditorView != TouchEditorView.Edit) return;
-		if (control.Launcher != null) { DrawLauncherProperties(sb, control); return; }
 		Rectangle panel = CustomPropertyBounds(control);
 		DrawEditorPanel(sb, panel);
 		DrawPropertyRow(sb, panel, 8, 46, T("SizeLabel"));
@@ -1160,7 +1267,10 @@ public partial class MobileMenuSystem : MobileSystem
 		sb.Draw(Texture("PlayerSliderKnob"), new Rectangle(track.X + (int)(amount * track.Width) - knobWidth / 2,
 			track.Center.Y - knobHeight / 2, knobWidth, knobHeight), Color.White);
 
-		if (control.Kind == MobileCustomControlKind.Button) {
+		if (control.Launcher != null) {
+			DrawCustomDeleteRow(sb, panel, 58, 42);
+		}
+		else if (control.Kind == MobileCustomControlKind.Button) {
 			Rectangle multitouch = PropertyAt(panel, 10, 58, 420, 42);
 			Rectangle multiRow = PropertyAt(panel, 10, 58, 420, 42);
 			DrawEditorSurface(sb, multiRow, true);
@@ -1173,29 +1283,21 @@ public partial class MobileMenuSystem : MobileSystem
 			Label(sb, T("On"), on, .65f, true, control.Multitouch ? Color.White : Color.Gray);
 			Rectangle action = PropertyAt(panel, 10, 106, 420, 42);
 			DrawPropertyActionRow(sb, action, CustomBindingLabel(control.Action, control.ModKeybind, control.KeyboardKey), control.Action);
-			Rectangle texture = PropertyAt(panel, 10, 154, 420, 42);
-			DrawTextureChoiceRow(sb, texture, control);
 			if (Hit(off) && control.Multitouch) { control.Multitouch = false; RecordCustomEdit(); }
 			if (Hit(on) && !control.Multitouch) { control.Multitouch = true; RecordCustomEdit(); }
 			if (Hit(action)) OpenBindingPicker(-1);
-			if (Hit(texture)) CycleControlTexture(control);
-			DrawLauncherConversionRow(sb, panel, control, 202);
-			DrawCustomDeleteRow(sb, panel, 250, 42);
+			DrawCustomDeleteRow(sb, panel, 154, 42);
 		}
 		else if (control.Kind == MobileCustomControlKind.Joystick) {
 			Rectangle role = PropertyAt(panel, 10, 58, 420, 42);
 			DrawPropertyRow(sb, panel, 58, 42, T("JoystickRole"));
 			Label(sb, JoystickRoleLabel(control.JoystickRole),
 				PropertyAt(panel, 260, 58, 158, 42), .7f, true, Color.White);
-			Rectangle texture = PropertyAt(panel, 10, 106, 420, 42);
-			DrawTextureChoiceRow(sb, texture, control);
 			if (Hit(role)) {
                 control.JoystickRole = (MobileJoystickRole)(((int)control.JoystickRole + 1) % Enum.GetValues<MobileJoystickRole>().Length);
                 RecordCustomEdit();
 			}
-			if (Hit(texture)) CycleControlTexture(control);
-			DrawLauncherConversionRow(sb, panel, control, 154);
-			DrawCustomDeleteRow(sb, panel, 202, 42);
+			DrawCustomDeleteRow(sb, panel, 106, 42);
 		}
 		else {
 			for (int i = 0; i < 4; i++) {
@@ -1204,40 +1306,8 @@ public partial class MobileMenuSystem : MobileSystem
 				DrawPropertyActionRow(sb, action, CustomBindingLabel(bound, control.RadialModKeybinds.ElementAtOrDefault(i), control.RadialKeyboardKeys.ElementAtOrDefault(i)), bound, i + 1);
 				if (Hit(action)) OpenBindingPicker(i);
 			}
-			Rectangle texture = PropertyAt(panel, 10, 234, 420, 42);
-			DrawTextureChoiceRow(sb, texture, control);
-			if (Hit(texture)) CycleControlTexture(control);
-			DrawLauncherConversionRow(sb, panel, control, 282);
-			DrawCustomDeleteRow(sb, panel, 330, 42);
+			DrawCustomDeleteRow(sb, panel, 234, 42);
 		}
-	}
-
-	private void DrawTextureChoiceRow(SpriteBatch sb, Rectangle row, MobileCustomControl control)
-	{
-		DrawEditorSurface(sb, row, true);
-		ControlTextureEntry entry = ControlTexturePackSystem.FindTexture(control.TextureName);
-		string name = entry?.DisplayName ?? control.TextureName;
-		Label(sb, T("Texture"), new Rectangle(row.X + (int)(12 * layout.Scale), row.Y, (int)(80 * layout.Scale), row.Height), .68f);
-		if (ControlTexturePackSystem.GetTexture(control.TextureName) is Texture2D icon) {
-			int size = Math.Max(18, (int)(28 * layout.Scale));
-			sb.Draw(icon, new Rectangle(row.X + (int)(92 * layout.Scale), row.Center.Y - size / 2, size, size), Color.White);
-		}
-		Label(sb, string.IsNullOrWhiteSpace(name) ? T("ChooseTexture") : name,
-			new Rectangle(row.X + (int)(128 * layout.Scale), row.Y, row.Width - (int)(158 * layout.Scale), row.Height), .66f, true);
-		DrawEditorDropdownArrow(sb, row);
-	}
-
-	private void CycleControlTexture(MobileCustomControl control)
-	{
-		ControlTextureEntry current = ControlTexturePackSystem.FindTexture(control.TextureName);
-		IReadOnlyList<ControlTextureEntry> entries = ControlTexturePackSystem.Textures(current?.Category);
-		if (entries.Count == 0) {
-			Main.NewText(T("TheActiveTexturePackHasNoAvailableTextures"));
-			return;
-		}
-		int index = entries.ToList().FindIndex(entry => entry.Id == current?.Id);
-		control.TextureName = entries[(index + 1) % entries.Count].Id;
-		RecordCustomEdit();
 	}
 
 	private void DrawPropertyRow(SpriteBatch sb, Rectangle panel, int y, int height, string text)
@@ -1274,7 +1344,6 @@ public partial class MobileMenuSystem : MobileSystem
 	private void UpdateCustomEditorGestures(int width, int height)
 	{
 		if (touchEditorView != TouchEditorView.Edit || editorDraft == null) return;
-		if (launcherPropertyPath != null) { consumed = true; return; }
 		MobileCustomControl selected = SelectedCustomControl();
 		if (selected != null) {
 			if (selected.Launcher == null && selected.Kind == MobileCustomControlKind.RadialMenu && pressed && !editorInputBlocked) {
@@ -1289,7 +1358,7 @@ public partial class MobileMenuSystem : MobileSystem
 			}
 			Rectangle panel = CustomPropertyBounds(selected);
 			Rectangle sizeTrack = CustomSizeSlider(panel);
-			if (selected.Launcher == null && !editorSizing && pressed && !consumed && sizeTrack.Contains(pressPosition.ToPoint())) {
+			if (!editorSizing && pressed && !consumed && sizeTrack.Contains(pressPosition.ToPoint())) {
 				editorSizing = true;
 				editorGestureChanged = false;
 				consumed = true;
@@ -1313,7 +1382,7 @@ public partial class MobileMenuSystem : MobileSystem
 			}
 		}
 
-		Rectangle addPanel = EditorScreenAt(0, 136, 536, 108);
+		Rectangle addPanel = EditorScreenAt(0, 136, 536, 60);
 		if (pressed && !consumed && !editorInputBlocked && !touchEditorPanel.Contains(pressPosition.ToPoint())
 			&& !addPanel.Contains(pressPosition.ToPoint()) && (selected == null || !CustomPropertyBounds(selected).Contains(pressPosition.ToPoint()))) {
 			MobileCustomControl hit = FindCustomControlAt(pressPosition, width, height);
@@ -1393,13 +1462,6 @@ public partial class MobileMenuSystem : MobileSystem
 		}
 		if (addControlKind == MobileCustomControlKind.RadialMenu)
 			control.RadialActions = Enumerable.Repeat(MobileControlAction.Unbound, 4).ToList();
-		if (kind is MobileCustomControlKind.DPad or MobileCustomControlKind.Touchpad or MobileCustomControlKind.Mousewheel or MobileCustomControlKind.Text) {
-			string type = kind.ToString().ToLowerInvariant();
-			control.Launcher = new MobileLauncherControl { Data = MobileLauncherControl.Defaults(type) };
-			control.Action = MobileControlAction.LauncherControl;
-			Vector2 dimensions = control.Launcher.Dimensions(height, 1);
-			control.X -= dimensions.X / width / 2; control.Y -= dimensions.Y / height / 2;
-		}
 		ConstrainCustomControl(control, width, height);
 		return control;
 	}
@@ -1430,7 +1492,6 @@ public partial class MobileMenuSystem : MobileSystem
 		selectedControlId = null;
 		selectedRadialSlot = -1;
 		addControlKind = null;
-		EndLauncherPropertyEdit();
 		RecordCustomEdit();
 	}
 
@@ -1641,6 +1702,9 @@ public partial class MobileMenuSystem : MobileSystem
 		MobileControlAction.ZoomOut => T("ZoomOut"),
 		MobileControlAction.SwitchLoadout => T("SwitchLoadout"),
 		MobileControlAction.ToggleGameControls => T("ToggleGameControls"),
+		MobileControlAction.TogglePointerMode => T("TogglePointerMode"),
+		MobileControlAction.PerformanceDisplay => T("PerformanceDisplay"),
+		MobileControlAction.ShowKeyboard => T("ShowKeyboard"),
 		MobileControlAction.Mount => T("QuickMount"),
 		MobileControlAction.QuickPotions => T("QuickPotions"),
 		MobileControlAction.Zoom => T("Zoom"),
@@ -1681,7 +1745,6 @@ public partial class MobileMenuSystem : MobileSystem
 
 	private void DiscardCustomDraft()
 	{
-		EndLauncherPropertyEdit();
 		addControlKind = null;
 		editorDraft = null;
 		editorHistory = null;
@@ -1734,7 +1797,6 @@ public partial class MobileMenuSystem : MobileSystem
 
 	private void ResetCustomEditor()
 	{
-		EndLauncherPropertyEdit();
 		addControlKind = null;
 		MobileJoystickConfig config = MobileJoystickConfig.Instance;
 		touchEditorView = TouchEditorView.Overview;

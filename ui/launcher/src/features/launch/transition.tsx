@@ -1,3 +1,4 @@
+import { LaunchEmblem } from './emblem';
 import { useTranslation } from '../../i18n';
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Dialog } from 'radix-ui';
@@ -12,6 +13,7 @@ interface LaunchState {
   message: string;
   source?: 'steam' | 'gog' | 'android' | null;
   error?: string;
+  missingTerrariaPe?: boolean;
   origin: DOMRect;
 }
 const LaunchContext = createContext<{
@@ -19,6 +21,7 @@ const LaunchContext = createContext<{
   active: boolean;
 } | null>(null);
 const stageIndex = { resources: 0, ownership: 0, mods: 1, handoff: 2 };
+const cancelLaunch = () => void nativeRequest('cancel', { operation: 'launch.check' }).catch(() => {});
 
 export function LaunchTransitionProvider({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
@@ -41,7 +44,7 @@ export function LaunchTransitionProvider({ children }: { children: ReactNode }) 
     setLogs(null);
   };
   const start = (element: HTMLElement) => {
-    if (locked.current || launcher.nativeState?.busy) return;
+    if (locked.current || (launcher.nativeState?.launchBlocked ?? launcher.nativeState?.busy)) return;
     locked.current = true;
     trigger.current = element;
     history.current = [];
@@ -55,17 +58,19 @@ export function LaunchTransitionProvider({ children }: { children: ReactNode }) 
       origin,
       source: launcher.nativeState?.terrariaSource,
     });
-    void nativeRequest('launch', {
-      motion: launcher.motionEnabled,
-      transition: {
-        left: origin.left,
-        top: origin.top,
-        width: origin.width,
-        height: origin.height,
-        viewportWidth: innerWidth,
-      },
-    })
-      .then(() => {
+    void nativeRequest<{ missingTerrariaPe?: boolean }>('launch')
+      .then((result) => {
+        if (result.missingTerrariaPe) {
+          setLaunch((current) =>
+            current && {
+              ...current,
+              phase: 'failed',
+              error: '本机未检测到 Google Play 版 Terraria PE。',
+              missingTerrariaPe: true,
+            },
+          );
+          return;
+        }
         setLaunch((current) =>
           current?.phase === 'checking'
             ? { ...current, phase: 'handoff', stage: 2, message: '正在进入游戏…' }
@@ -73,7 +78,7 @@ export function LaunchTransitionProvider({ children }: { children: ReactNode }) 
         );
       })
       .catch((error: Error) => {
-        if (error.message.includes('超时')) void nativeRequest('cancel').catch(() => {});
+        if (error.message.includes('超时')) cancelLaunch();
         setLaunch((current) =>
           current
             ? { ...current, phase: 'failed', message: '启动检查未通过', error: error.message }
@@ -85,16 +90,17 @@ export function LaunchTransitionProvider({ children }: { children: ReactNode }) 
   useEffect(
     () =>
       onNativeSnapshot((snapshot) => {
-        if (!locked.current || snapshot.operation !== 'launch.check' || !snapshot.busy) return;
-        if (history.current.at(-1) !== snapshot.message)
-          history.current = [...history.current, snapshot.message].slice(-50);
+        if (!locked.current || !snapshot.launchStage || !snapshot.busy) return;
+        const message = snapshot.launchMessage || snapshot.message;
+        if (history.current.at(-1) !== message)
+          history.current = [...history.current, message].slice(-50);
         const stage = snapshot.launchStage ? stageIndex[snapshot.launchStage] : undefined;
         setLaunch((current) =>
           current?.phase === 'checking'
             ? {
                 ...current,
                 stage: stage ?? current.stage,
-                message: snapshot.message,
+                message,
               }
             : current,
         );
@@ -102,6 +108,17 @@ export function LaunchTransitionProvider({ children }: { children: ReactNode }) 
     [],
   );
   useEffect(() => {
+    const progress = (event: Event) => {
+      if (!locked.current) return;
+      const detail: string = (event as CustomEvent<string>).detail;
+      if (history.current.at(-1) !== detail) {
+        history.current = [...history.current, detail].slice(-50);
+        setLogs((current) => current === null ? null : current + '\n' + detail);
+      }
+      setLaunch((current) => current && current.phase !== 'failed'
+        ? { ...current, phase: 'handoff', stage: 3, message: detail }
+        : current);
+    };
     const returned = () => {
       close();
       void nativeRequest('state').catch(() => {});
@@ -110,11 +127,13 @@ export function LaunchTransitionProvider({ children }: { children: ReactNode }) 
       if (!locked.current) return;
       event.stopImmediatePropagation();
       if (phase.current === 'failed') close();
-      else if (phase.current === 'checking') void nativeRequest('cancel').catch(() => {});
+      else if (phase.current === 'checking') cancelLaunch();
     };
+    window.addEventListener('launcher:game-startup', progress);
     window.addEventListener('launcher:game-returned', returned);
     window.addEventListener('launcher:back', back, true);
     return () => {
+      window.removeEventListener('launcher:game-startup', progress);
       window.removeEventListener('launcher:game-returned', returned);
       window.removeEventListener('launcher:back', back, true);
     };
@@ -179,7 +198,7 @@ export function LaunchTransitionProvider({ children }: { children: ReactNode }) 
                   setLogs(null);
                   logButton.current?.focus();
                 } else if (launch.phase === 'failed') close();
-                else if (launch.phase === 'checking') void nativeRequest('cancel').catch(() => {});
+                else if (launch.phase === 'checking') cancelLaunch();
               }}
             >
               <header className="game-launch-top">
@@ -189,15 +208,7 @@ export function LaunchTransitionProvider({ children }: { children: ReactNode }) 
                 <span className="game-launch-version">{launcher.nativeState?.tml}</span>
               </header>
               <div className="game-launch-center">
-                <div className="game-launch-emblem" aria-hidden="true">
-                  <div className="game-launch-orbit outer" />
-                  <div className="game-launch-orbit inner" />
-                  <div className="game-launch-disc">
-                    <img src="/tmodloader.png" alt="" />
-                  </div>
-                  <i className="game-launch-pixel one" />
-                  <i className="game-launch-pixel two" />
-                </div>
+                <LaunchEmblem />
                 <Dialog.Title>
                   {launch.phase === 'failed' ? t('暂时无法启动') : t('准备出发')}
                 </Dialog.Title>
@@ -240,7 +251,18 @@ export function LaunchTransitionProvider({ children }: { children: ReactNode }) 
               </div>
               {launch.phase === 'failed' && (
                 <div className="game-launch-actions">
-                  {launch.error?.includes('Steam') ? (
+                  {launch.missingTerrariaPe ? (
+                    <Button
+                      variant="primary"
+                      onClick={() =>
+                        void nativeRequest('terraria.mobile.openStore').catch(() =>
+                          launcher.notify(t('无法打开 Google Play。')),
+                        )
+                      }
+                    >
+                      {t('前往 Google Play')}
+                    </Button>
+                  ) : launch.error?.includes('Steam') ? (
                     <Button
                       variant="primary"
                       onClick={() => {

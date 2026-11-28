@@ -29,7 +29,6 @@ class PatchRepository(private val directory: File) {
                 "1.0.14",
             ),
             Builtin("mobile-fullscreen", "全屏显示", "按实际 Surface 同步显示与全屏呈现，适配系统栏和窗口重建。", "1.1.2"),
-            Builtin("mobile-render-scale", "渲染比例", "按设置中的 50%、75% 或 100% 创建渲染缓冲区。", "1.0.3"),
             Builtin("mobile-console", "控制台兼容", "适配 Android 不支持的桌面控制台操作；日志由启动器管理。", "1.0.3"),
             Builtin(
                 "mobile-framerate",
@@ -38,14 +37,12 @@ class PatchRepository(private val directory: File) {
                 "0.1.1",
                 false,
             ),
-            Builtin("mobile-fps", "帧率显示", "在游戏内显示实际完成呈现的 FPS。", "1.0.0", false),
             Builtin(
                 "mobile-hosting",
                 "手机联机托管 · 实验性",
-                "从游戏多人入口或 /mobilehost 创建房间；启用补丁不会自动启动服务器。",
+                "在适配版本中，可从游戏多人入口或使用 /mobilehost 创建房间。",
                 "0.1.0",
-                false,
-                "2026.9.3.1",
+                target = "2026.9.3.1",
             ),
         )
 
@@ -110,6 +107,7 @@ class PatchRepository(private val directory: File) {
         val builtin = builtins.firstOrNull { it.id == id }
         if (builtin != null) {
             require(!builtin.required || enabled) { "必要适配不能停用" }
+            if (builtin.required) return
             require(!enabled || matchesVersion(version, builtin.target)) {
                 "此补丁需要 tModLoader ${builtin.target}"
             }
@@ -140,7 +138,7 @@ class PatchRepository(private val directory: File) {
             val patch = patches.getJSONObject(i)
             if (!patch.optBoolean("enabled")) continue
             if (patch.optBoolean("builtin")) {
-                require(matchesVersion(version, patch.optString("targetVersion"))) {
+                require(patch.optBoolean("required") || matchesVersion(version, patch.optString("targetVersion"))) {
                     "已启用补丁 ${patch.getString("name")} 与当前版本不兼容"
                 }
                 continue

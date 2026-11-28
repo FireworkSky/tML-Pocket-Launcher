@@ -1,8 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [string]$ApkPath,
-    [switch]$MobileTerrariaTextureFallback
+    [string]$ApkPath
 )
 
 $ErrorActionPreference = 'Stop'
@@ -24,14 +23,20 @@ if ($null -ne $jarCommand) {
 
 foreach ($required in @(
     'lib/arm64-v8a/libmain.so',
+    'lib/arm64-v8a/libtheorafile.so',
     'lib/arm64-v8a/libdotnethost.so',
     'lib/arm64-v8a/libSDL3.so',
     'lib/arm64-v8a/libSDL2_compat.so',
     'lib/arm64-v8a/libFNA3D_sdl3.so',
     'lib/arm64-v8a/libFAudio_sdl3.so',
     'lib/arm64-v8a/libc++_shared.so',
+    'lib/arm64-v8a/libterraria_converter.so',
+    'assets/mobile-controls/control-sprites.json',
+    'assets/mobile-controls/control-textures.json',
+    'assets/mobile-controls/asset-aliases.json',
     'assets/runtime/dotnet.tar.xz',
     'assets/launcher/manifest.json',
+    'assets/launcher/touch-drawings.json',
     'assets/launcher/MobileLauncher.Host.dll',
     'assets/launcher/MobileLauncher.Host.runtimeconfig.json',
     'assets/launcher/MobileLauncher.Bootstrap.dll',
@@ -41,8 +46,8 @@ foreach ($required in @(
     'assets/launcher/Stores/MobileLauncher.Stores.dll',
     'assets/launcher/Stores/MobileLauncher.Stores.runtimeconfig.json',
     'assets/launcher/Stores/SteamKit2.dll',
-    'assets/tmodloader-default/tModLoader.zip',
     'assets/ui/index.html',
+    'assets/ui/game.html',
     'assets/ui/icons.svg',
     'assets/ui/animate-ui-license.txt',
     'assets/ui/inspira-ui-license.txt',
@@ -54,18 +59,22 @@ foreach ($required in @(
 
 $gameEntries = @($entries | Where-Object {
     $_ -like 'assets/game/*' -or
+    $_ -like '*/tModLoader.zip' -or
+    $_ -like '*.rawimg' -or
+    $_ -like 'assets/launcher/control-sprites/*' -or
+    $_ -like '*/control-art.zip' -or
     $_ -like 'assets/launcher/BuiltinMods/*' -or
     $_ -match '(?i)(^|/)(tModLoader|FNA)\.dll$' -or
     $_ -match '(?i)^assets/(launcher/)?Content/'
 })
 if ($gameEntries.Count -gt 0) {
-    throw "APK contains loose game resources: $($gameEntries -join ', ')"
+    throw "APK contains game resources: $($gameEntries -join ', ')"
 }
-$fallbackPath = 'assets/mobile-terraria/texture-fallback.zip'
-if (($entries -contains $fallbackPath) -ne $MobileTerrariaTextureFallback.IsPresent) {
-    throw 'APK texture fallback presence does not match -MobileTerrariaTextureFallback'
+$legacyProfileEntries = @($entries | Where-Object { $_ -match '^assets/mobile-terraria/.*\.(zip|png|xnb)$' })
+if ($legacyProfileEntries.Count -gt 0) {
+    throw "APK contains obsolete mobile Terraria files: $($legacyProfileEntries -join ', ')"
 }
-Write-Output 'Verified game assemblies are confined to the bundled release archive'
+Write-Output 'Verified APK excludes the tModLoader release ZIP and game resources'
 if ($entries -contains 'assets/ui/preview.html' -or @($entries | Where-Object { $_ -like 'assets/ui/*.map' -or $_ -like 'assets/ui/assets/*.map' }).Count -gt 0) {
     throw 'Production UI must not contain development previews or source maps'
 }
@@ -75,53 +84,13 @@ if ($entries -contains 'assets/ui/preview.html' -or @($entries | Where-Object { 
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $archive = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path -LiteralPath $ApkPath))
 try {
-    $defaultTml = $archive.GetEntry('assets/tmodloader-default/tModLoader.zip').Open()
-    $algorithm = [Security.Cryptography.SHA256]::Create()
-    try {
-        $hash = [BitConverter]::ToString($algorithm.ComputeHash($defaultTml)).Replace('-', '')
-        if ($hash -ne '5AAED81B245044286C3ADE200F8BAC9162EF932EE8FF11A31E05DA49A186C07B') {
-            throw 'Bundled tModLoader ZIP does not match the official v2026.09.3.1 release.'
-        }
-        Write-Output 'Verified bundled tModLoader v2026.09.3.1'
-    } finally {
-        $algorithm.Dispose()
-        $defaultTml.Dispose()
-    }
-    if ($MobileTerrariaTextureFallback) {
-        $fallbackStream = $archive.GetEntry($fallbackPath).Open()
-        try {
-            $fallback = [IO.Compression.ZipArchive]::new($fallbackStream, [IO.Compression.ZipArchiveMode]::Read)
-            try {
-                if ($fallback.Entries.Count -eq 0) { throw 'Texture fallback ZIP is empty' }
-                $fallbackNames = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
-                foreach ($entry in $fallback.Entries) {
-                    if ($entry.FullName -cnotmatch '^Images/(?:[\w. -]+/)*[\w. -]+\.xnb$' -or
-                        $entry.FullName -match '(?:^|/)\.{1,2}(?:/|$)' -or
-                        -not $fallbackNames.Add($entry.FullName) -or $entry.Length -lt 10) {
-                        throw "Invalid texture fallback entry: $($entry.FullName)"
-                    }
-                    $reader = [IO.BinaryReader]::new($entry.Open())
-                    try {
-                        if ([Text.Encoding]::ASCII.GetString($reader.ReadBytes(3)) -ne 'XNB') {
-                            throw "Invalid XNB texture: $($entry.FullName)"
-                        }
-                    } finally {
-                        $reader.Dispose()
-                    }
-                }
-                Write-Output "Verified $($fallback.Entries.Count) embedded XNB textures"
-            } finally {
-                $fallback.Dispose()
-            }
-        } finally {
-            $fallbackStream.Dispose()
-        }
-    }
     $prefix = 'lib/arm64-v8a/'
     $systemLibraries = @('libc.so', 'libm.so', 'libdl.so', 'liblog.so', 'libandroid.so', 'libOpenSLES.so', 'libGLESv1_CM.so', 'libGLESv2.so', 'libGLESv3.so', 'libEGL.so', 'libvulkan.so', 'libz.so', 'libjnigraphics.so', 'libaaudio.so')
     $pending = [Collections.Generic.Queue[string]]::new()
     $visited = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     $pending.Enqueue('libmain.so')
+    $pending.Enqueue('libtheorafile.so')
+    $pending.Enqueue('libterraria_converter.so')
     while ($pending.Count -gt 0) {
         $name = $pending.Dequeue()
         if (-not $visited.Add($name)) { continue }
@@ -179,7 +148,7 @@ try {
         }
         if (-not $foundDynamic) { throw "ELF dynamic table not found: $name" }
     }
-    Write-Output 'Verified libmain native dependency closure without game preloads'
+    Write-Output 'Verified libmain and Terraria converter native dependency closure without game preloads'
 } finally {
     $archive.Dispose()
 }

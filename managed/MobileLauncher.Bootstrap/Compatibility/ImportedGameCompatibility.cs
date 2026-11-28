@@ -1,5 +1,7 @@
 using System.Reflection;
 using MobileLauncher.Bootstrap.Platform;
+using MonoMod.Cil;
+using MonoMod.RuntimeDetour;
 
 namespace MobileLauncher.Bootstrap.Compatibility;
 
@@ -46,6 +48,28 @@ public sealed class ImportedGameCompatibility : IDisposable
                 return null;
             }, required: true);
 
+            ImportedMobileUi.Apply(game, content, _hooks);
+
+            if (File.Exists(Path.Combine(content, "..", "conversion-report.json")) &&
+                !File.Exists(Path.Combine(content, "Images", "logo_1.xnb")) &&
+                !File.Exists(Path.Combine("Content", "Images", "logo_1.xnb")))
+            {
+                var splashLoader = Find(game, "Terraria.Initializers.AssetInitializer", "LoadSplashAssets")
+                    ?? throw new MissingMethodException("Terraria.Initializers.AssetInitializer", "LoadSplashAssets");
+                _hooks.Add(new ILHook(splashLoader, il =>
+                {
+                    var cursor = new ILCursor(il);
+                    if (!cursor.TryGotoNext(MoveType.After, op => op.MatchLdstr(@"Images\logo_")) ||
+                        !cursor.TryGotoNext(MoveType.After, op => op.MatchCall<string>(nameof(string.Concat))))
+                    {
+                        throw new InvalidOperationException("The tModLoader splash asset request has changed.");
+                    }
+
+                    // The legacy splash field is initialized but the game never reads it.
+                    cursor.EmitDelegate<Func<string, string>>(_ => @"Images\SplashScreens\Splash_1");
+                }));
+            }
+
             // SocialMode.None still calls SteamedWraps.Initialize in desktop tML.
             // Preserve tag initialization while preventing its native SteamGameServer fallback.
             Patch("Terraria.Social.Steam.SteamedWraps", "Initialize", (_, _) =>
@@ -79,11 +103,25 @@ public sealed class ImportedGameCompatibility : IDisposable
                 return next();
             }, required: true);
 
+            _ = int.TryParse(Environment.GetEnvironmentVariable("TML_RENDER_RESOLUTION_PERCENT"), out int renderPercent);
+            bool fixed1080p = Environment.GetEnvironmentVariable("TML_FIXED_2400_1080") == "1";
+            var mainType = game.GetType("Terraria.Main", throwOnError: true)!;
+            var minWidth = mainType.GetField("minScreenW", Flags);
+            var minHeight = mainType.GetField("minScreenH", Flags);
             Patch("Terraria.Main", "SetDisplayMode", (args, next) =>
             {
                 if (bridge.TryGetDisplaySize(out var width, out var height))
                 {
                     (width, height) = AndroidDisplayResolution.NormalizeLandscape(width, height);
+                    if (fixed1080p)
+                    {
+                        (width, height) = (2400, 1080);
+                    }
+                    else if (renderPercent is 60 or 75)
+                    {
+                        (width, height) = AndroidDisplayResolution.Scale(width, height, renderPercent,
+                            (int?)minWidth?.GetValue(null) ?? 800, (int?)minHeight?.GetValue(null) ?? 720);
+                    }
                     args[0] = width;
                     args[1] = height;
                     args[2] = true;
@@ -109,11 +147,15 @@ public sealed class ImportedGameCompatibility : IDisposable
             // FnaIme receives committed characters from SDL's existing TextInputEXT event.
             Patch("Terraria.ModLoader.UI.UIFocusInputTextField", "Focus", (_, next) =>
             {
-                var result = next(); bridge.SetImeVisible(true); return result;
+                var result = next();
+                RequestIme();
+                return result;
             });
             Patch("Terraria.ModLoader.UI.UIFocusInputTextField", "LeftClick", (_, next) =>
             {
-                var result = next(); bridge.SetImeVisible(true); return result;
+                var result = next();
+                RequestIme();
+                return result;
             });
             PatchAssembly(relogic, "ReLogic.OS.Linux.Clipboard", "GetClipboard", (_, _) => bridge.GetClipboardText() ?? string.Empty);
             PatchAssembly(relogic, "ReLogic.OS.Linux.Clipboard", "SetClipboard", (args, _) =>
@@ -127,6 +169,14 @@ public sealed class ImportedGameCompatibility : IDisposable
             Dispose();
             throw;
         }
+    }
+
+    private void RequestIme()
+    {
+        if (_ime is not null)
+            _ime.GetType().GetMethod("Enable", Flags)!.Invoke(_ime, null);
+        else
+            _bridge.SetImeVisible(true);
     }
 
     private void PumpEvents()

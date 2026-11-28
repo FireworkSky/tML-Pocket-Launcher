@@ -101,7 +101,7 @@ internal static class MobileJoystickLayout
 		int padding = Math.Max(2, (int)(3f * scale));
 		int sideButtonSize = Math.Max(16, (int)(38f * scale));
 		int edge = Math.Max(4, (int)((config?.EdgePadding ?? 18) * scale * 0.5f));
-		int startX = Math.Max(edge, (int)(width * .056f)) + sideButtonSize + padding;
+		int startX = Math.Max(edge, (int)(width * .047f)) + sideButtonSize + padding;
 		int startY = Math.Max(4, (int)(6f * scale));
 		MobileCustomPreset preset = GetCustomPreset(config);
 		if (preset != null) {
@@ -122,7 +122,7 @@ internal static class MobileJoystickLayout
 			config?.HotbarOrientation ?? MobileHotbarOrientation.Vertical);
 	}
 
-	private static MobileCustomPreset GetCustomPreset(MobileJoystickConfig config)
+	internal static MobileCustomPreset GetCustomPreset(MobileJoystickConfig config)
 	{
 		if (config?.ControlLayout == MobileControlLayoutMode.Custom
 			&& config.CustomPresets != null && config.CustomPresets.Count > 0) {
@@ -141,8 +141,8 @@ internal static class MobileJoystickLayout
 		float edge = (config?.EdgePadding ?? 18) * scale * .5f;
 		MobileHotbarLayout hotbar = CreateHotbarLayout(config, width, height);
 		// Match the phone layout while keeping the clusters clear of the screen edges.
-		float leftInset = Math.Max(width * .203125f, 166f * scale + edge);
-		float rightInset = Math.Max(width * .15f, 166f * scale + edge);
+		float leftInset = Math.Max(width * .19f, 166f * scale + edge);
+		float rightInset = Math.Max(width * .145f, 166f * scale + edge);
 		float centerY = height - 104f * scale - edge;
 		MobileJoystickConfig activeConfig = config ?? MobileJoystickConfig.Instance;
 		Vector2 move = new(leftInset + (activeConfig?.LeftStickOffsetX ?? 0f), centerY + (activeConfig?.LeftStickOffsetY ?? 0f));
@@ -159,8 +159,8 @@ internal static class MobileJoystickLayout
 			new(MobileControlAction.Interact, "HeldItem", move + new Vector2(-106f, -84f) * scale, large),
 			new(MobileControlAction.AimModeToggle, "AimUseMode", move + new Vector2(-96f, 80f) * scale, small),
 			new(MobileControlAction.UseItem, "HeldItem", attack + new Vector2(-126f, 7f) * scale, medium),
-			new(MobileControlAction.Inventory, "BackpackIcon", hotbar.InventoryButton.Center.ToVector2(), hotbar.SideButtonSize * 0.5f * hotbar.EffectiveScale / Math.Max(.01f, hotbar.Scale)),
-			new(MobileControlAction.Settings, "Settings", hotbar.SettingsButton.Center.ToVector2(), hotbar.SideButtonSize * 0.5f * hotbar.EffectiveScale / Math.Max(.01f, hotbar.Scale))
+			new(MobileControlAction.Inventory, "BackpackIcon", hotbar.InventoryButton.Center.ToVector2(), hotbar.InventoryButton.Width * .5f),
+			new(MobileControlAction.Settings, "Settings", hotbar.SettingsButton.Center.ToVector2(), hotbar.SettingsButton.Width * .5f)
 		};
 
 		if (config.ControlLayout == MobileControlLayoutMode.Advanced) {
@@ -175,6 +175,7 @@ internal static class MobileJoystickLayout
 			buttons.Add(new(MobileControlAction.ZoomIn, "ZoomIn", attack + new Vector2(-176f, 80f) * scale, 16f * scale));
 		}
 
+		buttons.Add(CreatePerformanceButton(config, width, height));
 		if (config.ShowTopButtons) {
 			for (int i = 0; i < 3; i++) {
 				Rectangle bounds = GetToolbarButton(config, i, width, height);
@@ -199,14 +200,14 @@ internal static class MobileJoystickLayout
 			Vector2 center = GetCustomControlCenter(control, width, height, radius);
 			if (control.Launcher != null) {
 				if (control.Launcher.Flag("isVisible", true)) buttons.Add(new MobileControlButton(MobileControlAction.LauncherControl, "", center, radius, control.Id, control.Multitouch,
-					launcher: control.Launcher, dimensions: control.Launcher.Dimensions(height, control.Size)));
+					launcher: control.Launcher, dimensions: control.Launcher.Dimensions(height, control.Size), customTexture: control.CustomTexture));
 				continue;
 			}
 			if (control.Kind == MobileCustomControlKind.Joystick) {
 				float joystickRadius = radius;
-				sticks.Add(new(control.Id, control.JoystickRole, center, radius, control.TextureName));
+				sticks.Add(new(control.Id, control.JoystickRole, center, radius, control.TextureName, control.CustomTexture));
 				if (control.JoystickRole == MobileJoystickRole.Grapple)
-					buttons.Add(new(MobileControlAction.Grapple, "GrappleHook", center, radius, control.Id));
+					buttons.Add(new(MobileControlAction.Grapple, "GrappleHook", center, radius, control.Id, customTexture: control.CustomTexture));
 				if (control.JoystickRole == MobileJoystickRole.Move && moveRadius == 0f) {
 					move = center;
 					moveRadius = joystickRadius;
@@ -224,9 +225,11 @@ internal static class MobileJoystickLayout
 			float buttonRadius = radius;
 			buttons.Add(new MobileControlButton(action, textureName, center, buttonRadius, control.Id, control.Multitouch,
 				control.Kind == MobileCustomControlKind.RadialMenu ? control.RadialActions : null, control.ModKeybind, control.RadialModKeybinds,
-				keyboardKey: control.KeyboardKey, radialKeyboardKeys: control.RadialKeyboardKeys));
+				keyboardKey: control.KeyboardKey, radialKeyboardKeys: control.RadialKeyboardKeys, customTexture: control.CustomTexture));
 		}
 
+		if (!buttons.Exists(button => button.Action == MobileControlAction.PerformanceDisplay))
+			buttons.Add(CreatePerformanceButton(config, width, height));
 		return new MobileControlLayout(move, moveRadius, aim, aimRadius, buttons.ToArray(), scale, sticks);
 	}
 
@@ -262,6 +265,7 @@ internal static class MobileJoystickLayout
 		MobileControlAction.Map => "Map",
 		MobileControlAction.MapStyle or MobileControlAction.MapAlphaCycle => "MapStyle",
 		MobileControlAction.Settings or MobileControlAction.ToggleGameControls => "Settings",
+		MobileControlAction.TogglePointerMode or MobileControlAction.PerformanceDisplay or MobileControlAction.ShowKeyboard => "PhoneTealCircle",
 		MobileControlAction.Chat => "ChatBubble",
 		MobileControlAction.ZoomIn => "ZoomIn",
 		MobileControlAction.ZoomOut => "ZoomOut",
@@ -274,6 +278,12 @@ internal static class MobileJoystickLayout
 		MobileControlAction.Loadout1 or MobileControlAction.Loadout2 or MobileControlAction.Loadout3 or MobileControlAction.SwitchLoadout => "BackpackIcon",
 		_ => "ItemButtonFrame"
 	};
+
+	private static MobileControlButton CreatePerformanceButton(MobileJoystickConfig config, int width, int height)
+	{
+		Rectangle bounds = GetToolbarButton(config, -1, width, height);
+		return new(MobileControlAction.PerformanceDisplay, "PhoneTealCircle", bounds.Center.ToVector2(), bounds.Width * .5f);
+	}
 
 	public static Rectangle GetToolbarButton(MobileJoystickConfig config, int index, int width, int height)
 	{

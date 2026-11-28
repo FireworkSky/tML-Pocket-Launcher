@@ -42,9 +42,15 @@ internal readonly struct MobileInventoryLayout
 	public Rectangle ModEquipmentButton => Apply(MobileInterfaceRegion.Equipment, Right(380, 260, 44, 44));
 	public Rectangle LoadoutButton => Apply(MobileInterfaceRegion.Equipment, Right(330, 260, 44, 44));
 	public Rectangle Defense => Apply(MobileInterfaceRegion.Equipment, Right(280, 260, 44, 44));
-	// The first ten slots keep their two-column hotbar order when the bag opens.
-	public Rectangle Inventory(int slot) => Apply(MobileInterfaceRegion.InventoryItems, At(54 + slot / 5 * 50, 4 + slot % 5 * 50));
-	public Rectangle InventoryDefault(int slot) => At(54 + slot / 5 * 50, 4 + slot % 5 * 50);
+	public Rectangle Inventory(int slot)
+	{
+		Rectangle bounds = MobileJoystickConfig.Instance?.HotbarOrientation == MobileHotbarOrientation.Horizontal
+			? InventoryCell(slot % 10, slot / 10)
+			: InventoryDefault(slot);
+		return Apply(MobileInterfaceRegion.InventoryItems, bounds);
+	}
+	public Rectangle InventoryDefault(int slot) => InventoryCell(slot / 5, slot % 5);
+	private Rectangle InventoryCell(int column, int row) => At(54 + column * 50, 4 + row * 50);
 	public Rectangle CoinAmmo(int slot) => Apply(MobileInterfaceRegion.CoinAmmo, At(572 + (slot >= 54 ? 50 : 0), 60 + (slot - 50) % 4 * 50, 44, 44));
 	public Rectangle Gear(int column, int row) => Apply(MobileInterfaceRegion.Equipment, Right(54 + (7 - column) * 50, 4 + row * 50));
 	public Rectangle Recipe(int index) => Apply(MobileInterfaceRegion.Crafting, Right(54 + index / 5 * 50, 4 + index % 5 * 50));

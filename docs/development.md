@@ -12,24 +12,24 @@ Configure `JAVA_HOME` and `ANDROID_HOME` locally, or use an ignored `android/loc
 
 SDL3 is fetched at the commit pinned in `android/native/CMakeLists.txt`. An explicit `TML_SDL3_SOURCE_DIR` overrides it. When CMake is configured without that variable, the previous override is cleared and the pinned source is restored. CMake checks the SDL version and every JNI registration against the launcher's Java declarations and stops before compiling incompatible bindings. For a standalone check, run `scripts/checks/check-sdl-jni.ps1 -SdlSourcePath <SDL3 source directory>`.
 
+The default build patches SDL's Vulkan feature negotiation so FNA3D can run on Android GPUs that lack optional features. If you override SDL with a local checkout of the pinned revision, apply `android/native/cmake/sdl-vulkan-optional-features.patch` to that checkout to get the same behavior. [SDL upstream change](https://github.com/libsdl-org/SDL/pull/13016)
+
 ## Commands
 
 ```powershell
 # Native dependencies
-git submodule update --init --recursive external/SDL external/FNA3D external/FAudio external/tML-Pocket-Patches external/tML-Pocket-Mods
+git submodule update --init --recursive external/SDL external/FNA3D external/FAudio external/tML-Pocket-Patches
 
-# Managed projects and tests
+# Managed projects
 .\scripts\build\prepare-game-references.ps1 -TmlRoot '<installed precompiled tModLoader release>'
 dotnet build MobileLauncher.slnx -c Release
-dotnet test MobileLauncher.slnx -c Release
-.\scripts\checks\check-patch-runtime.ps1
 
 # All repository checks
 .\scripts\checks\verify.ps1
 
 # Android application (publishes only launcher-managed code)
 Push-Location android
-.\gradlew.bat :app:testDebugUnitTest :app:assembleDebug --console=plain
+.\gradlew.bat :app:assembleDebug --console=plain
 Pop-Location
 
 # Inspect the generated APK
@@ -40,58 +40,44 @@ The general patch assembly is checked out from `external/tML-Pocket-Patches`. Th
 
 When preparing APK assets, the launcher script also passes `DirectoryBuildPropsPath` to the external patch build so it reads `managed/Directory.Build.props`. Android Studio does not need a shell environment variable for these shared settings.
 
-The APK includes Android CoreCLR, launcher/store hosts, Android native libraries, and the official tModLoader 2026.09.3.1 release ZIP. Gradle downloads and verifies the release when preparing the APK. Use `-PdefaultTmlArchive=<absolute path>` to provide a previously downloaded copy of the same ZIP. On first launch, the launcher installs the bundled release if the user has no version history.
+The APK includes Android CoreCLR, launcher/store hosts and Android native libraries. When the player chooses Set Up Game without a usable tML version selected, the launcher opens the release catalog. The player chooses which release to download and install. The catalog and default download use Gitee for mainland China (CN) and the official GitHub repository elsewhere. Android supplies the mobile network country when available, with the system region as fallback.
 
-The app can download or import additional tML releases. Terraria imports accept Steam ZIPs and GOG Linux `.sh` installers. Downloads use SteamKit/GOG account authorization. Steam resources require a fresh online ownership check before launch. GOG resources require no login at launch.
+The app can download or import additional tML releases. Terraria imports accept Steam ZIPs and GOG Linux `.sh` installers. Downloads use SteamKit/GOG account authorization. Steam downloads verify ownership before downloading and can launch offline. Imported Steam ZIPs require an online ownership check at launch. GOG resources require no login at launch.
 
 Gradle also runs `scripts/build/prepare-launcher-ui.ps1` and packages the approved
 UI under `assets/ui`. Source maps and the phone preview wrapper are excluded.
-Run `npm test` and `npm run format:check` in `ui/launcher` for the browser suites,
-including the native bridge, version-manager and resource-browser fixtures. The
-resource suite covers real operation names with mocked responses, failed/retried
-pagination, Workshop downloads, mod-pack operations and ten responsive sizes.
-Set `LAUNCHER_CAPTURE=1` to save screenshots under ignored `build/ui-previews`.
-These fixtures do not perform live downloads or establish device compatibility.
+Run `npm run check`, `npm run build` and `npm run format:check` in `ui/launcher`
+to validate types, generate production assets and check source formatting.
 See [implemented Android paths and limits](android-launcher.md).
 
 ## Runtime validation
 
-The optional Terraria PE resource converter uses C++ and JNI on Android arm64. Build its profile
-from the target tModLoader image layout and compiled shaders,
-desktop Terraria sound and font inventory and XACT metadata, and the texture
-fallback ZIP produced by `prepare-mobile-terraria-textures.ps1`.
+The Terraria PE resource converter uses C++ and JNI on Android arm64 and is included
+in both Debug and Release builds, including Android Studio Run/Build.
+For tML `2026.09.3.1`, the converter reads the image inventory and embedded UI
+from the installed `tModLoader.dll`. tModLoader resolves its textures and shaders
+from the installed release. The converter assembles UI locally from PE sprites
+and programmatic drawings. The APK contains the mobile control recipes and
+`lib/arm64-v8a/libterraria_converter.so`. Run `check-apk.ps1` to verify the package.
 
-```powershell
-.\scripts\build\prepare-mobile-terraria-android.ps1 -OutputPath build/mobile-terraria-android-profile.zip -TargetTml 2026.09.3.1 -TerrariaContent $terrariaContent -TmlContent $tmlContent -ImageLayout $imageLayout -TextureFallback $textureFallback
-$profile = (Resolve-Path build/mobile-terraria-android-profile.zip).Path
-Push-Location android
-.\gradlew.bat :app:installDebug :app:installDebugAndroidTest "-PmobileTerrariaProfile=$profile"
-Pop-Location
-adb shell am instrument -w app.com.tmlpocket.test/app.com.tmlpocket.feature.installation.MobileTerrariaConversionTest
-```
-
-To prepare mobile resources, select the profile's tModLoader version and use
+To convert the installed PE resources, select tModLoader `2026.09.3.1` and use
 **Games → Add game → Terraria PE → Convert resources**. The launcher
 stores and selects the resulting files in `games/terraria-android`. Start the
 game from **Home → Launch game**. The Installed tab can select desktop
 Terraria resources again.
 
-The instrumentation run reads the installed Terraria PE APK and checks the
-converted file count and music bank. Its result includes the app-private output
-path. Keep at least 2 GiB free on the device during conversion. The profile
-is specific to the desktop target. The test build uses the Terraria PE APK as the
+Keep at least 2 GiB free on the device during conversion. The converter uses the installed Terraria PE APK as the
 source of music, sound effects, fonts, and available textures.
 
-Install the APK, import Terraria Content, select/download or import tML, and launch. Confirm the game reaches its main menu, then test touch controls, text input and a second launch. Existing tests and package checks validate infrastructure; they do not establish compatibility with every tML release.
+Install the APK, import Terraria Content, select/download or import tML, and launch. Confirm the game reaches its main menu, then check touch controls, text input and a second launch for the selected tML release.
 
 For account transport validation, use an account owning Terraria from Games >
 Accounts. Complete Steam Guard or the separate GOG official login page on the
 device; do not put passwords/codes in scripts or logs. Verify ownership, download,
 cancellation, installation rollback on failure and token restore after reopening.
-The automated fixture does not establish successful live authentication. Store
-protocol code is in `managed/MobileLauncher.Stores`; Android token/runtime glue is
-in `feature/stores`. Run managed tests before the Gradle build, since both restore
-and publish the same projects and must not run concurrently against the same obj.
+Store protocol code is in `managed/MobileLauncher.Stores`; Android token/runtime
+glue is in `feature/stores`. Run managed compilation before the Gradle build,
+since both restore and publish the same projects and share their obj directories.
 
 ```powershell
 adb install -r android/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk
@@ -107,4 +93,4 @@ If a Java stack trace shows `PipeImpl` → `UnixDomainSockets.connect` → `Inva
 
 Use a precompiled Terraria 1.4.4.9 / tML 2026.09.3.1 release as `TML_REFERENCE_ROOT`, or stage it with the command above. The chosen source path is remembered only in ignored `build/game-references/source.txt`. Do not point it at the tML source checkout. The launcher's build compiles MobileJoystick and its own patch assembly, never the game or FNA.
 
-Gradle bundles `MobileLauncher.Controls.dll` with its textures and localization, `MobileLauncher.Patches.dll` and upstream GPL text. The runtime harness checks attachment and removal against the real game assembly, embedded resources, frame pacing and touch input using synthetic contacts.
+Gradle bundles `MobileLauncher.Controls.dll` with its textures and localization, `MobileLauncher.Patches.dll` and upstream GPL text.

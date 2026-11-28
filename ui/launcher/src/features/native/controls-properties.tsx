@@ -1,16 +1,12 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Button } from '../../components/ui';
 import { useTranslation } from '../../i18n';
-import { nativeRequest } from '../../native/bridge';
+import { LabeledSelect, Slider } from '../../components/form-controls';
 
 export const componentTypes = [
   ['joystick', '按键摇杆'],
-  ['button', '按键'],
-  ['radialmenu', '轮盘'],
-  ['dpad', '方向键'],
-  ['touchpad', '触控板'],
-  ['mousewheel', '滚轮'],
-  ['text', '文本'],
+  ['button', '游戏控件'],
+  ['radialmenu', '展开式轮盘'],
 ] as const;
 
 export type ControlData = Record<string, unknown> & {
@@ -19,42 +15,103 @@ export type ControlData = Record<string, unknown> & {
   width?: number;
   height?: number;
 };
-type Sector = { keycode: string; label: string; iconPath: string };
-type TextureLayer = { path?: string; enabled?: boolean; scaleMode?: string; opacity?: number };
-const textureSlots: Record<string, readonly (readonly [string, string])[]> = {
-  button: [
-    ['normal', '普通'],
-    ['pressed', '按下'],
-    ['toggled', '切换开启'],
-    ['disabled', '禁用'],
-  ],
-  joystick: [
-    ['background', '底座'],
-    ['knob', '摇杆帽'],
-    ['backgroundPressed', '按下时的底座'],
-    ['knobPressed', '按下时的摇杆帽'],
-  ],
-  radialmenu: [
-    ['centerBackground', '中心'],
-    ['expandedBackground', '展开背景'],
-    ['sector', '扇区'],
-    ['sectorSelected', '选中扇区'],
-  ],
-  touchpad: [
-    ['background', '背景'],
-    ['touchIndicator', '触点'],
-  ],
-  mousewheel: [
-    ['background', '背景'],
-    ['wheelIndicator', '滚动指示'],
-  ],
-  text: [['background', '背景']],
-};
-export function texturePreview(data: ControlData, assets: Record<string, string> | undefined) {
-  const slot = textureSlots[data.type]?.[0]?.[0];
-  const layer = slot && (data.texture as Record<string, TextureLayer> | undefined)?.[slot];
-  const hash = layer && layer.enabled && assets?.[layer.path ?? ''];
-  return hash && /^[a-f0-9]{64}$/.test(hash) ? `/controls-textures/${hash}.png` : undefined;
+type Sector = { keycode: string; label: string };
+
+export function RadialPreview({ data }: { data: ControlData }) {
+  const count = Math.max(4, Math.min(12, Number(data.sectorCount ?? 8)));
+  const diameter = `${Number(data.expandedScale ?? 2.5) * 100}%`;
+  const step = 360 / count;
+  const sectors = data.sectors as Sector[] | undefined;
+  return (
+    <span className="controls-expanded-wheel" aria-hidden="true" style={{
+      width: diameter,
+      height: diameter,
+      backgroundImage: data.showDividers === false ? undefined :
+        `repeating-conic-gradient(from ${-step / 2}deg, #fff5 0deg 1deg, transparent 1deg ${step}deg)`,
+    }}>
+      {Array.from({ length: count }, (_, i) => {
+        const angle = i * 2 * Math.PI / count;
+        return <span key={i} style={{ left: `${50 + 36 * Math.sin(angle)}%`, top: `${50 - 36 * Math.cos(angle)}%` }}>
+          {sectors?.[i]?.label ?? i + 1}
+        </span>;
+      })}
+    </span>
+  );
+}
+
+async function readControlPng(file: File) {
+  if (file.size < 33 || file.size > 128 * 1024) throw new Error();
+  const header = new DataView(await file.slice(0, 24).arrayBuffer());
+  if (
+    header.getUint32(0) !== 0x89504e47 ||
+    header.getUint32(4) !== 0x0d0a1a0a ||
+    header.getUint32(8) !== 13 ||
+    header.getUint32(12) !== 0x49484452 ||
+    ![header.getUint32(16), header.getUint32(20)].every((size) => size >= 1 && size <= 256)
+  )
+    throw new Error();
+  const uri = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file.slice(0, file.size, 'image/png'));
+  });
+  const image = new Image();
+  image.src = uri;
+  await image.decode();
+  return uri;
+}
+
+export function ControlTexturePicker({
+  value,
+  onChange,
+}: {
+  value?: string;
+  onChange: (texture?: string) => void;
+}) {
+  const { t } = useTranslation();
+  const input = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState(false);
+  return (
+    <div className="controls-field">
+      <span>{t('控件贴图')}</span>
+      <small>{t('PNG，最大 256 × 256 像素、128 KiB')}</small>
+      <div className="controls-editor-actions">
+        <Button onClick={() => input.current?.click()}>{t('选择 PNG')}</Button>
+        {value && (
+          <Button
+            onClick={() => {
+              setError(false);
+              onChange();
+            }}
+          >
+            {t('恢复默认贴图')}
+          </Button>
+        )}
+      </div>
+      <input
+        hidden
+        ref={input}
+        type="file"
+        accept="image/png"
+        aria-label={t('选择 PNG')}
+        onChange={async (event) => {
+          const picker = event.currentTarget;
+          const file = picker.files?.[0];
+          picker.value = '';
+          if (!file) return;
+          setError(false);
+          try {
+            const texture = await readControlPng(file);
+            if (picker.isConnected) onChange(texture);
+          } catch {
+            if (picker.isConnected) setError(true);
+          }
+        }}
+      />
+      {error && <span role="alert">{t('无法读取贴图，请选择符合尺寸和大小要求的 PNG。')}</span>}
+    </div>
+  );
 }
 
 export function Range({
@@ -75,56 +132,47 @@ export function Range({
   const { t } = useTranslation();
   const translatedLabel = t(label);
   return (
-    <label className="controls-field">
-      <span>
-        {translatedLabel} <output>{Number(value.toFixed(2))}</output>
-      </span>
-      <input
-        type="range"
+    <div className="controls-field">
+      <span>{translatedLabel}</span>
+      <Slider
+        label={translatedLabel}
         min={min}
         max={max}
         step={step}
         value={value}
-        aria-label={translatedLabel}
-        onChange={(event) => onChange(event.target.valueAsNumber)}
+        unit=""
+        onChange={onChange}
       />
-    </label>
+    </div>
   );
 }
 
-export function ExtendedControlFields({
+export function ControlBindings({
   data,
-  assets,
   edit,
   actions,
 }: {
   data: ControlData;
-  assets?: Record<string, string>;
-  edit: (changes: Partial<ControlData>, assets?: Record<string, string>) => void;
+  edit: (changes: Partial<ControlData>) => void;
   actions: readonly (readonly [string, string])[];
 }) {
   const { t } = useTranslation();
   const { type } = data;
-  const [textureError, setTextureError] = useState('');
-  const [pickingTexture, setPickingTexture] = useState(false);
-  const textures = (data.texture as Record<string, TextureLayer> | undefined) ?? {};
-  const setTexture = (slot: string, changes: Partial<TextureLayer>, nextAssets = assets) =>
-    edit({ texture: { ...textures, [slot]: { ...textures[slot], ...changes } } }, nextAssets);
-  const pickTexture = async (slot: string) => {
-    setPickingTexture(true);
-    setTextureError('');
-    try {
-      const result = await nativeRequest<{ hash: string } | null>('controls.texture.pick');
-      if (result?.hash) {
-        const path = result.hash + '.png';
-        setTexture(slot, { path, enabled: true }, { ...assets, [path]: result.hash });
+  const actionOptions = actions.map(([key, name]) => [key, t(name)] as const);
+  const binding = (label: string, value: string, update: (key: string) => void) => (
+    <LabeledSelect
+      key={label}
+      className="controls-field"
+      label={label}
+      value={value}
+      onChange={update}
+      options={
+        actionOptions.some(([key]) => key === value)
+          ? actionOptions
+          : [[value, value], ...actionOptions]
       }
-    } catch (error) {
-      setTextureError(error instanceof Error ? error.message : '无法选择控件贴图');
-    } finally {
-      setPickingTexture(false);
-    }
-  };
+    />
+  );
   const toggle = (key: string, label: string, fallback = false) => (
     <label className="controls-check">
       <input
@@ -151,34 +199,6 @@ export function ExtendedControlFields({
       step={step}
       onChange={(value) => edit({ [key]: value })}
     />
-  );
-  const select = (key: string, label: string, options: readonly (readonly [string, string])[]) => (
-    <label className="controls-field">
-      {t(label)}
-      <select
-        value={String(data[key] ?? options[0][0])}
-        onChange={(event) => edit({ [key]: event.target.value })}
-      >
-        {options.map(([value, text]) => (
-          <option key={value} value={value}>
-            {t(text)}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-  const binding = (label: string, value: string, update: (key: string) => void) => (
-    <label className="controls-field" key={label}>
-      {label}
-      <select value={value} onChange={(event) => update(event.target.value)}>
-        {!actions.some(([key]) => key === value) && <option value={value}>{value}</option>}
-        {actions.map(([key, name]) => (
-          <option key={key} value={key}>
-            {t(name)}
-          </option>
-        ))}
-      </select>
-    </label>
   );
   const size = (key: 'width' | 'height', label: string) => (
     <Range
@@ -214,25 +234,24 @@ export function ExtendedControlFields({
     </label>
   );
   const directions = [
-    ['upKeycode', '上', 'KEYBOARD_W'],
-    ['rightKeycode', '右', 'KEYBOARD_D'],
-    ['downKeycode', '下', 'KEYBOARD_S'],
-    ['leftKeycode', '左', 'KEYBOARD_A'],
+    ['上', 'KEYBOARD_W'],
+    ['右', 'KEYBOARD_D'],
+    ['下', 'KEYBOARD_S'],
+    ['左', 'KEYBOARD_A'],
   ] as const;
   const joystickKeys =
-    (data.joystickKeys as string[] | undefined) ?? directions.map((entry) => entry[2]);
+    (data.joystickKeys as string[] | undefined) ?? directions.map((entry) => entry[1]);
+  const points = (data.polygonPoints as { x: number; y: number }[] | undefined) ?? [];
   const sectors = Array.from(
     { length: Number(data.sectorCount ?? 8) },
     (_, i) =>
       (data.sectors as Sector[] | undefined)?.[i] ?? {
         keycode: 'KEYBOARD_' + (i + 1),
         label: String(i + 1),
-        iconPath: '',
       },
   );
   const changeSector = (index: number, changes: Partial<Sector>) =>
     edit({ sectors: sectors.map((entry, i) => (i === index ? { ...entry, ...changes } : entry)) });
-  const points = (data.polygonPoints as { x: number; y: number }[] | undefined) ?? [];
   return (
     <>
       <label className="controls-field">
@@ -243,41 +262,20 @@ export function ExtendedControlFields({
           onChange={(event) => edit({ name: event.target.value })}
         />
       </label>
-      {size('width', '宽度')}
-      {size('height', '高度')}
-      {toggle('isSizeRatioLocked', '锁定宽高比', true)}
-      {range('rotation', '旋转', 0, -180, 180, 1)}
-      {range('opacity', '背景不透明度', 0.35, 0, 1, 0.01)}
-      {range('borderOpacity', '边框不透明度', 0.5, 0, 1, 0.01)}
-      {range('textOpacity', '文字不透明度', 0.9, 0, 1, 0.01)}
-      {range('strokeWidth', '边框宽度', 1.5, 0, 12, 0.5)}
-      {range('cornerRadius', '圆角', 8, 0, 80, 1)}
-      {color('bgColor', '背景颜色', 0xff2a2a2a)}
-      {color('strokeColor', '边框颜色', 0xffaaaaaa)}
-      {color('textColor', '文字颜色', 0xffffffff)}
-      {toggle('isVisible', '游戏中可见', true)}
-      {toggle('isPassThrough', '触摸穿透')}
-      {(type === 'button' || type === 'text') &&
-        select(
-          'shape',
-          '形状',
-          type === 'button'
-            ? [
-                ['RECTANGLE', '矩形'],
-                ['CIRCLE', '圆形'],
-                ['POLYGON', '多边形'],
-              ]
-            : [
-                ['RECTANGLE', '矩形'],
-                ['CIRCLE', '圆形'],
-              ],
-        )}
+      {type === 'button' &&
+        binding(t('按键绑定'), String(data.keycode ?? 'UNKNOWN'), (keycode) => edit({ keycode }))}
       {type === 'button' && (
         <>
-          {binding(t('按键绑定'), String(data.keycode ?? 'UNKNOWN'), (keycode) =>
-            edit({ keycode }),
-          )}
-          {toggle('isToggle', '点按切换按下状态')}
+          <LabeledSelect className="controls-field" label={t('形状')}
+            value={String(data.shape ?? 'RECTANGLE')}
+            options={[['RECTANGLE', t('矩形')], ['CIRCLE', t('圆形')], ['POLYGON', t('多边形')]]}
+            onChange={(shape) => edit({
+              shape,
+              ...(shape === 'POLYGON' && points.length < 3 && {
+                polygonPoints: [{ x: 0.5, y: 0 }, { x: 1, y: 0.5 }, { x: 0.5, y: 1 }, { x: 0, y: 0.5 }],
+              }),
+            })}
+          />
           {data.shape === 'POLYGON' && (
             <details className="controls-details">
               <summary>{t('多边形顶点')}</summary>
@@ -308,6 +306,7 @@ export function ExtendedControlFields({
                     </label>
                   ))}
                   <Button
+                    disabled={points.length <= 3}
                     aria-label={t('删除顶点 {number}', { number: index + 1 })}
                     onClick={() => edit({ polygonPoints: points.filter((_, i) => i !== index) })}
                   >
@@ -333,143 +332,51 @@ export function ExtendedControlFields({
               </Button>
             </details>
           )}
+
+          <details className="controls-details">
+            <summary>{t('大小与位置')}</summary>
+            {size('width', '宽度')}
+            {size('height', '高度')}
+            {toggle('isSizeRatioLocked', '锁定宽高比', true)}
+            {range('rotation', '旋转', 0, -180, 180, 1)}
+          </details>
+          <details className="controls-details">
+            <summary>{t('按钮外观')}</summary>
+            {(data.shape ?? 'RECTANGLE') === 'RECTANGLE' && range('cornerRadius', '圆角', 8, 0, 80, 1)}
+            {range('strokeWidth', '边框宽度', 1.5, 0, 12, 0.5)}
+            {range('opacity', '背景不透明度', 0.35, 0, 1, 0.01)}
+            {range('borderOpacity', '边框不透明度', 0.5, 0, 1, 0.01)}
+            {range('textOpacity', '文字不透明度', 0.9, 0, 1, 0.01)}
+            {color('bgColor', '背景颜色', 0xff2a2a2a)}
+            {color('strokeColor', '边框颜色', 0xffaaaaaa)}
+            {color('textColor', '文字颜色', 0xffffffff)}
+          </details>
+          {toggle('isVisible', '游戏中可见', true)}
+          {toggle('isToggle', '点按切换按下状态')}
         </>
       )}
       {type === 'joystick' && (
         <>
-          {select('mode', '摇杆模式', [
-            ['KEYBOARD', '四向按键'],
-            ['MOUSE', '鼠标移动'],
-          ])}
-          {range('stickKnobSize', '摇杆帽大小', 0.4, 0.05, 1, 0.05)}
-          {range('stickOpacity', '摇杆帽不透明度', 0.7, 0, 1, 0.05)}
           {data.mode !== 'MOUSE' &&
-            directions.map(([, label, key], i) =>
+            directions.map(([label, key], i) =>
               binding(t(label), joystickKeys[i] ?? key, (value) =>
                 edit({
                   joystickKeys: directions.map((entry, j) =>
-                    i === j ? value : (joystickKeys[j] ?? entry[2]),
+                    i === j ? value : (joystickKeys[j] ?? entry[1]),
                   ),
                 }),
               ),
             )}
         </>
       )}
-      {type === 'dpad' && (
-        <>
-          {select('style', '方向键样式', [
-            ['CROSS', '十字'],
-            ['ROUND', '圆形'],
-            ['SQUARE', '方形'],
-          ])}
-          {directions.map(([field, label, key]) =>
-            binding(t(label), String(data[field] ?? key), (value) => edit({ [field]: value })),
-          )}
-          {toggle('allowDiagonal', '允许斜向', true)}
-          {toggle('showLabels', '显示方向标签')}
-          {range('deadZone', '方向键死区', 0.2, 0, 0.95, 0.05)}
-          {range('buttonSize', '方向键大小', 0.35, 0.05, 0.5, 0.01)}
-          {range('buttonSpacing', '方向键间距', 0.05, 0, 0.5, 0.01)}
-          {color('activeColor', '按下颜色', 0xccffffff)}
-        </>
-      )}
       {type === 'radialmenu' && (
         <details className="controls-details">
           <summary>{t('轮盘扇区')}</summary>
-          {range('sectorCount', '扇区数量', 8, 4, 12, 1)}
-          {range('expandedScale', '展开倍率', 2.5, 1, 8, 0.1)}
-          {range('expandDuration', '展开时长（毫秒）', 150, 0, 3000, 25)}
-          {range('deadZoneRatio', '轮盘死区', 0.3, 0, 1, 0.05)}
-          {toggle('showDividers', '显示分隔线', true)}
-          {color('dividerColor', '分隔线颜色', 0x66ffffff)}
-          {color('selectedColor', '选中颜色', 0x99ffffff)}
-          {sectors.map((sector, index) => (
-            <div className="controls-point" key={index}>
-              <label className="controls-field">
-                {t('扇区 {number} 标签', { number: index + 1 })}
-                <input
-                  value={sector.label}
-                  maxLength={32}
-                  onChange={(event) => changeSector(index, { label: event.target.value })}
-                />
-              </label>
-              {binding(t('扇区 {number} 绑定', { number: index + 1 }), sector.keycode, (keycode) =>
-                changeSector(index, { keycode }),
-              )}
-            </div>
-          ))}
-        </details>
-      )}
-      {type === 'touchpad' && toggle('isDoubleClickSimulateJoystick', '双击启用摇杆', true)}
-      {type === 'mousewheel' && (
-        <>
-          {select('orientation', '滚动方向', [
-            ['VERTICAL', '纵向'],
-            ['HORIZONTAL', '横向'],
-          ])}
-          {toggle('reverseDirection', '反向滚动')}
-          {range('scrollSensitivity', '滚动灵敏度', 40, 1, 200, 1)}
-          {range('scrollRatio', '滚动倍率', 1, 0.1, 5, 0.1)}
-        </>
-      )}
-      {type === 'text' && (
-        <label className="controls-field">
-          {t('显示文字')}
-          <input
-            value={String(data.displayText ?? 'Text')}
-            maxLength={120}
-            onChange={(event) => edit({ displayText: event.target.value })}
-          />
-        </label>
-      )}
-      {!!textureSlots[type]?.length && (
-        <details className="controls-details">
-          <summary>{t('控件贴图')}</summary>
-          <fieldset disabled={pickingTexture}>
-            {textureSlots[type].map(([slot, label]) => (
-              <div className="controls-texture" key={slot}>
-                <span>{t(label)}</span>
-                <Button onClick={() => void pickTexture(slot)}>
-                  {textures[slot]?.path ? t('更换 PNG') : t('选择 PNG')}
-                </Button>
-                {textures[slot]?.path && (
-                  <>
-                    <Button onClick={() => setTexture(slot, { path: '', enabled: false })}>
-                      {t('清除')}
-                    </Button>
-                    <label className="controls-field">
-                      {t('贴图缩放')}
-                      <select
-                        value={textures[slot].scaleMode ?? 'FIT'}
-                        onChange={(event) => setTexture(slot, { scaleMode: event.target.value })}
-                      >
-                        {[
-                          ['FIT', '适应'],
-                          ['FILL', '填充'],
-                          ['STRETCH', '拉伸'],
-                          ['CENTER', '居中'],
-                          ['TILE', '平铺'],
-                        ].map(([value, name]) => (
-                          <option key={value} value={value}>
-                            {t(name)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <Range
-                      label="贴图不透明度"
-                      min={0}
-                      max={1}
-                      step={0.05}
-                      value={textures[slot].opacity ?? 1}
-                      onChange={(opacity) => setTexture(slot, { opacity })}
-                    />
-                  </>
-                )}
-              </div>
-            ))}
-            {textureError && <p role="alert">{t(textureError)}</p>}
-          </fieldset>
+          {sectors.map((sector, index) =>
+            binding(t('扇区 {number} 绑定', { number: index + 1 }), sector.keycode, (keycode) =>
+              changeSector(index, { keycode }),
+            ),
+          )}
         </details>
       )}
     </>

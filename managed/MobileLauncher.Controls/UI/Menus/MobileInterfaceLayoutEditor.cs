@@ -8,7 +8,14 @@ internal sealed class MobileInterfaceLayoutEditor
 {
 	private readonly List<MobileInterfaceLayoutProfile> undo = new();
 	private readonly List<MobileInterfaceLayoutProfile> redo = new();
-	private readonly Dictionary<string, (Vector2 Center, float Scale)> externalOpening = new(StringComparer.OrdinalIgnoreCase);
+	private const MobileInterfaceRegion ModLayoutRegion = MobileInterfaceRegion.CalamityDifficulty;
+	private readonly record struct ExternalEdit(MobileInterfaceRegionLayout ModLayout, Dictionary<string, (Vector2 Center, float Scale)> Panels);
+	private readonly List<ExternalEdit> externalUndo = new(), externalRedo = new();
+	private readonly List<ExternalUiBounds> pausePanels = new();
+	private readonly List<ExternalUiBounds> openingPanels = new();
+	private readonly List<ExternalUiBounds> livePanels = new();
+	private ExternalEdit externalOpening;
+	private bool externalSaveAttempted;
 	private const int HistoryLimit = 32;
 
 	public MobileInterfaceLayoutProfile Draft { get; private set; }
@@ -19,8 +26,10 @@ internal sealed class MobileInterfaceLayoutEditor
 	public string SelectedExternalUiId { get; set; }
 	public bool IsOpen { get; private set; }
 	public Rectangle HotbarEditorBounds { get; set; }
-	public bool CanUndo => !ExternalView && undo.Count > 0;
-	public bool CanRedo => !ExternalView && redo.Count > 0;
+	public bool CanUndo => ExternalView ? externalUndo.Count > 0 : undo.Count > 0;
+	public bool CanRedo => ExternalView ? externalRedo.Count > 0 : redo.Count > 0;
+
+	internal void CaptureBeforePause() => MobileExternalUiSystem.CollectBounds(pausePanels);
 
 	public void Open(MobileInterfaceLayoutProfile profile)
 	{
@@ -32,24 +41,35 @@ internal sealed class MobileInterfaceLayoutEditor
 		SelectedExternalUiId = null;
 		HotbarEditorBounds = Rectangle.Empty;
 		undo.Clear(); redo.Clear();
-		externalOpening.Clear();
-		foreach (ExternalUiLayoutAdapter adapter in ExternalUiLayoutRegistry.Adapters) {
-			Rectangle bounds = adapter.Bounds;
-			externalOpening[adapter.Id] = (new Vector2(bounds.Center.X, bounds.Center.Y), adapter.Scale);
-		}
+		externalUndo.Clear(); externalRedo.Clear();
+		externalSaveAttempted = false;
+		externalOpening = CaptureExternalEdit();
+		MobileExternalUiSystem.CollectBounds(openingPanels);
+		AppendMissingPanels(openingPanels, pausePanels);
 		IsOpen = true;
 		ExternalUiLayoutRegistry.SetEditing(true);
 	}
 
 	public void Close(bool keepExternalChanges = false)
 	{
-		if (!keepExternalChanges) RestoreExternalOpening();
+		if (!keepExternalChanges) {
+			RestoreExternalEdit(externalOpening, restoreProfile: false);
+			if (externalSaveAttempted) {
+				foreach (var adapter in ExternalUiLayoutRegistry.Registered) {
+					try { adapter.Save(); }
+					catch (Exception error) { MobileControlsSession.Logger.Warn($"Could not restore {adapter.Name} layout", error); }
+				}
+			}
+		}
 		ExternalUiLayoutRegistry.SetEditing(false);
 		IsOpen = false;
 		Draft = null;
 		Opening = null;
 		undo.Clear(); redo.Clear();
-		externalOpening.Clear();
+		externalUndo.Clear(); externalRedo.Clear();
+		externalOpening = default;
+		openingPanels.Clear();
+		livePanels.Clear();
 	}
 
 	public MobileInterfaceRegionLayout Resolve(MobileInterfaceRegion region, int width, int height)
@@ -94,7 +114,11 @@ internal sealed class MobileInterfaceLayoutEditor
 		Draft.Set(region, new MobileInterfaceRegionLayout { CenterX = cx / Math.Max(1f, width), CenterY = cy / Math.Max(1f, height), Scale = entry.Scale });
 	}
 
-	public void BeginGesture() => PushUndo();
+	public void BeginGesture()
+	{
+		if (ExternalView) PushExternalUndo();
+		else PushUndo();
+	}
 
 	public void SetScale(MobileInterfaceRegion region, float scale, int width, int height, bool record = true)
 	{
@@ -114,26 +138,41 @@ internal sealed class MobileInterfaceLayoutEditor
 	public void RestoreDefaults()
 	{
 		PushUndo();
-		Draft = new MobileInterfaceLayoutProfile();
+		RestoreBaseLayout(new MobileInterfaceLayoutProfile());
 	}
 
 	public void Undo()
 	{
 		if (!CanUndo) return;
+		if (ExternalView) {
+			externalRedo.Add(CaptureExternalEdit());
+			RestoreExternalEdit(externalUndo[^1]);
+			externalUndo.RemoveAt(externalUndo.Count - 1);
+			return;
+		}
 		redo.Add(Draft.Clone());
-		Draft = undo[^1]; undo.RemoveAt(undo.Count - 1);
+		RestoreBaseLayout(undo[^1]);
+		undo.RemoveAt(undo.Count - 1);
 	}
 
 	public void Redo()
 	{
 		if (!CanRedo) return;
+		if (ExternalView) {
+			externalUndo.Add(CaptureExternalEdit());
+			RestoreExternalEdit(externalRedo[^1]);
+			externalRedo.RemoveAt(externalRedo.Count - 1);
+			return;
+		}
 		undo.Add(Draft.Clone());
-		Draft = redo[^1]; redo.RemoveAt(redo.Count - 1);
+		RestoreBaseLayout(redo[^1]);
+		redo.RemoveAt(redo.Count - 1);
 	}
 
 	public MobileInterfaceLayoutProfile Apply()
 	{
 		Draft.Validate();
+		externalSaveAttempted = true;
 		foreach (ExternalUiLayoutAdapter adapter in ExternalUiLayoutRegistry.Adapters) adapter.Save();
 		return Draft.Clone();
 	}
@@ -147,22 +186,78 @@ internal sealed class MobileInterfaceLayoutEditor
 	public void ResetSelectedExternalUi()
 	{
 		ExternalUiLayoutAdapter adapter = SelectedExternalUi;
-		if (adapter != null) adapter.RestoreDefault();
+		if (adapter == null) return;
+		PushExternalUndo();
+		adapter.RestoreDefault();
 	}
 
 	public void ResetExternalUiDefaults()
 	{
+		if (ExternalUiLayoutRegistry.Adapters.Count == 0) return;
+		PushExternalUndo();
 		foreach (ExternalUiLayoutAdapter adapter in ExternalUiLayoutRegistry.Adapters) adapter.RestoreDefault();
 	}
 
-	private void RestoreExternalOpening()
+	internal IReadOnlyList<ExternalUiBounds> PreviewPanels()
 	{
-		foreach (ExternalUiLayoutAdapter adapter in ExternalUiLayoutRegistry.Adapters) {
-			if (!externalOpening.TryGetValue(adapter.Id, out var state)) continue;
-			adapter.Move(state.Center);
-			adapter.Resize(state.Scale);
-			adapter.Save();
+		MobileExternalUiSystem.CollectBounds(livePanels);
+		AppendMissingPanels(livePanels, openingPanels);
+		foreach (var panel in pausePanels) {
+			if (panel.AdapterId == null || livePanels.Exists(current => current.AdapterId == panel.AdapterId)) continue;
+			var adapter = ExternalUiLayoutRegistry.Find(panel.AdapterId);
+			if (adapter != null && !adapter.Bounds.IsEmpty)
+				livePanels.Add(panel with { Bounds = adapter.Bounds });
 		}
+		return livePanels;
+	}
+
+	internal bool WasPanelVisible(string id)
+		=> pausePanels.Exists(panel => panel.AdapterId == id) || openingPanels.Exists(panel => panel.AdapterId == id);
+
+	private static void AppendMissingPanels(List<ExternalUiBounds> panels, List<ExternalUiBounds> snapshots)
+	{
+		int liveCount = panels.Count;
+		foreach (var snapshot in snapshots)
+			if (snapshot.AdapterId == null && panels.FindIndex(0, liveCount, panel => panel.Name == snapshot.Name) < 0)
+				panels.Add(snapshot);
+	}
+
+	private ExternalEdit CaptureExternalEdit()
+	{
+		var panels = new Dictionary<string, (Vector2 Center, float Scale)>(StringComparer.OrdinalIgnoreCase);
+		foreach (var adapter in ExternalUiLayoutRegistry.Registered) {
+			Rectangle bounds = adapter.Bounds;
+			if (!bounds.IsEmpty) panels[adapter.Id] = (new Vector2(bounds.Center.X, bounds.Center.Y), adapter.Scale);
+		}
+		return new ExternalEdit(Draft?.Has(ModLayoutRegion) == true ? Draft.Get(ModLayoutRegion) : null, panels);
+	}
+
+	private void RestoreExternalEdit(ExternalEdit edit, bool restoreProfile = true)
+	{
+		if (edit.Panels == null) return;
+		foreach (var adapter in ExternalUiLayoutRegistry.Registered) {
+			if (!edit.Panels.TryGetValue(adapter.Id, out var state)) continue;
+			adapter.Resize(state.Scale);
+			adapter.Move(state.Center, clampToScreen: false);
+		}
+		if (!restoreProfile) return;
+		// Other tabs can change after an external edit. Restore only mod-owned regions here.
+		if (edit.ModLayout != null) Draft.Set(ModLayoutRegion, edit.ModLayout);
+		else Draft.Reset(ModLayoutRegion);
+	}
+
+	private void RestoreBaseLayout(MobileInterfaceLayoutProfile profile)
+	{
+		if (Draft.Has(ModLayoutRegion)) profile.Set(ModLayoutRegion, Draft.Get(ModLayoutRegion));
+		else profile.Reset(ModLayoutRegion);
+		Draft = profile;
+	}
+
+	private void PushExternalUndo()
+	{
+		externalUndo.Add(CaptureExternalEdit());
+		if (externalUndo.Count > HistoryLimit) externalUndo.RemoveAt(0);
+		externalRedo.Clear();
 	}
 
 	private void ClampToViewport(MobileInterfaceRegion region, Rectangle defaults, int width, int height)

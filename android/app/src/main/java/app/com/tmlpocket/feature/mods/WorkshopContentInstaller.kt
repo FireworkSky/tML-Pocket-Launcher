@@ -50,7 +50,7 @@ class WorkshopContentInstaller(
             .filter { it.isFile && it.extension.equals("tmod", true) }
             .mapNotNull { file -> runCatching { TmodReader.read(file) to file }.getOrNull() }
             .toList()
-        require(candidates.isNotEmpty()) { "工坊项目没有可读取的 .tmod 文件" }
+        require(candidates.isNotEmpty()) { "工坊项目中没有可读取的游戏模组" }
         require(candidates.map { it.first.name }.distinct().size == 1) { "工坊项目包含多个不同的模组" }
         val ordered = candidates.sortedByDescending { versionKey(it.first.loaderVersion) }
         val active = loaderVersion?.let(::versionKey)

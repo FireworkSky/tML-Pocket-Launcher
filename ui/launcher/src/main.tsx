@@ -22,17 +22,20 @@ import './styles/tml-theme.css';
 import { SteamProvider } from './features/native/steam/state';
 import { LaunchTransitionProvider } from './features/launch/transition';
 import { DownloadsProvider } from './features/native/download-state';
+import { LauncherNoticeGate } from './features/launcher-notice';
 
 createRoot(document.getElementById('root')!).render(
-  <LauncherProvider>
-    <TooltipProvider delayDuration={400} skipDelayDuration={300}>
-      <DownloadsProvider>
-        <SteamProvider>
-          <LaunchTransitionProvider>
-            <App />
-          </LaunchTransitionProvider>
-        </SteamProvider>
-      </DownloadsProvider>
-    </TooltipProvider>
-  </LauncherProvider>,
+  <LauncherNoticeGate>
+    <LauncherProvider>
+      <TooltipProvider delayDuration={400} skipDelayDuration={300}>
+        <DownloadsProvider>
+          <SteamProvider>
+            <LaunchTransitionProvider>
+              <App />
+            </LaunchTransitionProvider>
+          </SteamProvider>
+        </DownloadsProvider>
+      </TooltipProvider>
+    </LauncherProvider>
+  </LauncherNoticeGate>,
 );

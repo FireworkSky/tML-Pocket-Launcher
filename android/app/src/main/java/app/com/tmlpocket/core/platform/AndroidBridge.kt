@@ -10,7 +10,6 @@ import android.net.Uri
 import android.os.Build
 import android.os.SystemClock
 import android.view.KeyEvent
-import android.widget.Toast
 import app.com.tmlpocket.feature.game.GameActivity
 import java.lang.ref.WeakReference
 import org.libsdl.app.SDLActivity
@@ -28,8 +27,20 @@ object AndroidBridge {
     private const val EVENT_IME_COMMIT = 8
     private const val EVENT_IME_COMPOSITION = 9
     private const val EVENT_IME_VISIBILITY = 10
+    private const val EVENT_KEYBOARD_REQUEST = 11
 
     @Volatile private var imeRequestedVisible = false
+    @Volatile private var frameRate = 0
+    @Volatile private var sampledAt = 0L
+
+    @JvmStatic fun reportFrameRate(fps: Int): Int {
+        frameRate = fps
+        sampledAt = SystemClock.elapsedRealtime()
+        return 0
+    }
+
+    internal fun recentFrameRate(): Int =
+        if (SystemClock.elapsedRealtime() - sampledAt <= 2500) frameRate else 0
     private var lastImeVisible: Boolean? = null
 
     @Volatile private var activityReference: WeakReference<Activity>? = null
@@ -53,15 +64,8 @@ object AndroidBridge {
 
     @JvmStatic
     fun showToast(message: String, longDuration: Int): Int {
-        val activity = currentActivity() ?: return -1
-        activity.runOnUiThread {
-            Toast.makeText(
-                    activity,
-                    message,
-                    if (longDuration != 0) Toast.LENGTH_LONG else Toast.LENGTH_SHORT,
-                )
-                .show()
-        }
+        val activity = currentActivity() as? GameActivity ?: return -1
+        activity.runOnUiThread { activity.showNotice(message, longDuration != 0) }
         return 0
     }
 
@@ -89,7 +93,7 @@ object AndroidBridge {
                     "setStartupStatus ignored: activity is ${activity.javaClass.name}",
                 )
             } else {
-                gameActivity.updateStartupStatus(title, detail, progressPercent)
+                gameActivity.updateStartupStatus(detail, progressPercent)
             }
         }
         return 0
@@ -205,7 +209,7 @@ object AndroidBridge {
         android.util.Log.i("tMLPocketIme", "setImeVisible($visible)")
         val result =
             if (visible != 0) {
-                if (SDLActivity.showTextInput(0, 0, 1, 1, 1)) 0 else -1
+                if (SDLActivity.showTextInput(android.text.InputType.TYPE_CLASS_TEXT, 0, 0, 1, 1)) 0 else -1
             } else {
                 val activity = currentActivity() ?: return -1
                 // sendCommand queues the hide on the same SDL handler as showTextInput.
@@ -223,9 +227,10 @@ object AndroidBridge {
 
     @JvmStatic
     fun postImeVisibility(visible: Boolean, userDismissal: Boolean = false) {
-        if (lastImeVisible == visible) return
+        if (lastImeVisible == visible && !(userDismissal && imeRequestedVisible)) return
+        val wasVisible = lastImeVisible == true
         lastImeVisible = visible
-        val dismissed = !visible && (userDismissal || imeRequestedVisible)
+        val dismissed = !visible && (userDismissal || (wasVisible && imeRequestedVisible))
         if (dismissed) imeRequestedVisible = false
         post(kind = EVENT_IME_VISIBILITY, action = if (dismissed) 1 else 0, focused = visible)
     }
@@ -255,34 +260,9 @@ object AndroidBridge {
 
     @JvmStatic
     fun showTextPrompt(title: String, password: Int, requestCode: Int): Int {
-        val activity = currentActivity() ?: return -1
+        val activity = currentActivity() as? GameActivity ?: return -1
         activity.runOnUiThread {
-            if (
-                activity.isFinishing ||
-                    (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1 &&
-                        activity.isDestroyed)
-            ) {
-                postTextResult(requestCode, null)
-                return@runOnUiThread
-            }
-            val input =
-                android.widget.EditText(activity).apply {
-                    inputType =
-                        android.text.InputType.TYPE_CLASS_TEXT or
-                            if (password != 0) android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-                            else 0
-                }
-            android.app.AlertDialog.Builder(activity)
-                .setTitle(title)
-                .setView(input)
-                .setPositiveButton(android.R.string.ok) { _, _ ->
-                    postTextResult(requestCode, input.text.toString())
-                }
-                .setNegativeButton(android.R.string.cancel) { _, _ ->
-                    postTextResult(requestCode, null)
-                }
-                .setOnCancelListener { postTextResult(requestCode, null) }
-                .show()
+            activity.showTextPrompt(title, password != 0) { text -> postTextResult(requestCode, text) }
         }
         return 0
     }
@@ -292,6 +272,8 @@ object AndroidBridge {
     @JvmStatic fun postFocus(focused: Boolean) = post(kind = EVENT_FOCUS, focused = focused)
 
     @JvmStatic fun postBack() = post(EVENT_BACK)
+
+    fun postKeyboardRequest() = post(EVENT_KEYBOARD_REQUEST)
 
     @JvmStatic
     fun postText(text: String) {

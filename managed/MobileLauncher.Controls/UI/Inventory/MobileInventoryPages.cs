@@ -78,7 +78,7 @@ public partial class MobileInventorySystem
 		for (int i = 0; i < modPlayer.SlotCount; i++) if (!loader.IsHidden(i) && (loader.ModdedIsItemSlotUnlockedAndUsable(i, p) || loader.ModdedCanSlotBeShown(i))) slots.Add(i);
 		int pages = 1 + (slots.Count + 9) / 10; equipmentPage = Math.Clamp(equipmentPage, 0, pages - 1);
 		if (pages > 1 && IconButton(layout.ModEquipmentButton, "Grid", T("ExtraSlotsPrefix") + $"{equipmentPage + 1}/{pages}", equipmentPage > 0)) equipmentPage = (equipmentPage + 1) % pages;
-		if (equipmentPage > 0) { DrawModEquipment(slots, loader); return; }
+		if (equipmentPage > 0) { DrawModEquipment(slots, loader, modPlayer); return; }
 		for (int i = 0; i < 8; i++) DrawArmorRow(i);
 		if (p.CanDemonHeartAccessoryBeShown()) DrawArmorRow(8);
 		if (p.CanMasterModeAccessoryBeShown()) DrawArmorRow(9);
@@ -99,22 +99,40 @@ public partial class MobileInventorySystem
 		Slot(p.dye, 12, slot, layout.Armor(slot, 2), locked);
 	}
 
-	private void DrawModEquipment(List<int> slots, AccessorySlotLoader loader)
+	private void DrawModEquipment(List<int> slots, AccessorySlotLoader loader, ModAccessorySlotPlayer player)
 	{
 		if (!MobileInventoryNative.CanDrawModSlots) {
 			Text(T("ModdedEquipmentExtensionsAreUnavailable"), layout.Apply(MobileInterfaceRegion.Equipment, layout.Right(54, 204, 250, 44)), .7f);
 			return;
 		}
+		var (accessories, dyes) = MobileInventoryNative.GetModSlotItems(player);
+		bool[] hidden = MobileInventoryNative.ModVisibility;
 		for (int cell = 0; cell < 10; cell++) {
 			int index = (equipmentPage - 1) * 10 + cell; if (index >= slots.Count) break;
-			int slot = slots[index], column = cell / 5 * 4, row = cell % 5; ModAccessorySlot definition = loader.Get(slot); bool[] hidden = MobileInventoryNative.ModVisibility;
+			int slot = slots[index], column = cell / 5 * 4, row = cell % 5; ModAccessorySlot definition = loader.Get(slot);
 			for (int kind = 0; kind < 3; kind++) {
 				if (kind == 0 && !definition.DrawFunctionalSlot || kind == 1 && !definition.DrawVanitySlot || kind == 2 && !definition.DrawDyeSlot) continue;
 				Rectangle r = layout.Gear(column + 2 - kind, row); SetSlotScale(r);
 				if (kind == 0 && hidden != null) Visibility(r, hidden[slot], () => hidden[slot] = !hidden[slot]);
 				bool enabled = kind == 2 ? definition.IsEnabled() : loader.ModdedIsSpecificItemSlotUnlockedAndUsable(slot, Main.LocalPlayer, kind == 1);
 				Color back = Main.inventoryBack; if (!enabled) Main.inventoryBack = new Color(80, 80, 80, 80);
-				MobileInventoryNative.DrawModSlot(slot, kind, r, enabled, used); Main.inventoryBack = back; if (Hover(r)) used = true;
+				Item[] items = kind == 2 ? dyes : accessories;
+				int itemIndex = kind == 1 ? slot + player.SlotCount : slot;
+				int context = ItemSlot.Context.ModdedAccessorySlot - kind;
+				var gestureSlot = new InventoryGestureSlot(items, context, itemIndex, r, !enabled);
+				gestureSlots.Add(gestureSlot);
+				bool hover = Hover(r);
+				if (hover && !used && enabled && touchInput && pointerPressed && !UseNativeInventoryClick)
+					BeginInventoryDrag(gestureSlot);
+				bool tracking = touchInput && dragSource is InventoryGestureSlot source && source.SameSlot(gestureSlot);
+				bool left = Main.mouseLeft;
+				if (tracking) Main.mouseLeft = false;
+				try {
+					MobileInventoryNative.DrawModSlot(loader, items, context, itemIndex, r.Location, enabled, used || !hover || dragging);
+				}
+				finally { Main.mouseLeft = left; }
+				Main.inventoryBack = back;
+				if (hover) used = true;
 			}
 		}
 	}

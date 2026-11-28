@@ -1,16 +1,21 @@
 package app.com.tmlpocket.feature.mods
 
+import java.io.BufferedInputStream
 import java.io.ByteArrayInputStream
+import java.io.DataInput
 import java.io.DataInputStream
 import java.io.File
 import java.io.IOException
 import java.io.RandomAccessFile
+import java.nio.channels.Channels
 import java.security.MessageDigest
 import java.util.Base64
 import java.util.zip.Inflater
 import java.util.zip.InflaterInputStream
 import org.json.JSONArray
 import org.json.JSONObject
+
+internal val modInternalName = Regex("""[\p{L}\p{Nl}_][\p{L}\p{Nl}\p{M}\p{Nd}\p{Pc}]{0,127}""")
 
 /** Reads the public TMOD header, table and Info entry; never loads an assembly. */
 data class TmodMetadata(
@@ -40,41 +45,47 @@ data class TmodMetadata(
 }
 
 object TmodReader {
-    fun readIcon(file: File): String? = RandomAccessFile(file, "r").use { input ->
+    fun readIcon(file: File, requested: Set<String>): Pair<String, String>? = RandomAccessFile(file, "r").use { input ->
         fun integer(): Int = Integer.reverseBytes(input.readInt())
-        fun string(): String = readString { input.readUnsignedByte() }
+        fun string(): String = readString(input)
         val magic = ByteArray(4).also(input::readFully)
-        require(String(magic, Charsets.US_ASCII) == "TMOD") { "不是有效的 TMOD 模组" }
+        require(String(magic, Charsets.US_ASCII) == "TMOD") { "游戏模组格式无效" }
         string()
         input.seek(input.filePointer + 20 + 256)
         val dataLength = integer()
         require(dataLength >= 0 && input.length() - input.filePointer == dataLength.toLong()) { "模组长度不匹配或已损坏" }
-        string()
+        val id = string()
+        if (id !in requested) return@use null
         string()
         val count = integer()
         require(count in 1..100_000) { "模组文件表超出限制" }
         data class Entry(val name: String, val size: Int, val packed: Int, val offset: Long)
         val entries = ArrayList<Entry>()
+        val tableBuffer = object : BufferedInputStream(Channels.newInputStream(input.channel)) {
+            val unreadBytes get() = this.count - pos
+        }
+        val table = DataInputStream(tableBuffer)
         var offset = 0L
         repeat(count) {
-            val name = string()
-            val size = integer()
-            val packed = integer()
+            val name = readString(table)
+            val size = Integer.reverseBytes(table.readInt())
+            val packed = Integer.reverseBytes(table.readInt())
             require(size >= 0 && packed >= 0) { "模组文件长度无效" }
             entries.add(Entry(name, size, packed, offset))
             offset = Math.addExact(offset, packed.toLong())
             require(offset <= dataLength) { "模组文件表越界" }
         }
-        val dataStart = input.filePointer
+        val dataStart = input.filePointer - tableBuffer.unreadBytes
         require(dataStart + offset == input.length()) { "模组数据区不完整" }
         val choices = listOf(
             "icon_workshop.gif", "icon.gif", "icon_small.gif",
             "icon_workshop.webp", "icon.webp", "icon_small.webp",
             "icon_workshop.png", "icon.png", "icon_small.png",
         )
-        val icon = choices.firstNotNullOfOrNull { target -> entries.firstOrNull { it.name.equals(target, true) } }
+        val icon = choices.firstNotNullOfOrNull { target -> entries.firstOrNull {
+            it.name.equals(target, true) && it.size in 1..MAX_ICON_BYTES && it.packed in 1..MAX_ICON_BYTES
+        } }
             ?: return@use null
-        require(icon.size in 1..MAX_ICON_BYTES && icon.packed in 1..MAX_ICON_BYTES) { "模组图标大小无效" }
         require(dataStart + icon.offset + icon.packed <= input.length()) { "模组图标数据越界" }
         input.seek(dataStart + icon.offset)
         val packed = ByteArray(icon.packed).also(input::readFully)
@@ -85,20 +96,20 @@ object TmodReader {
             bytes.startsWith(byteArrayOf(0x89.toByte(), 0x50, 0x4e, 0x47)) -> "image/png"
             else -> return@use null
         }
-        "data:$mime;base64,${Base64.getEncoder().encodeToString(bytes)}"
+        id to "data:$mime;base64,${Base64.getEncoder().encodeToString(bytes)}"
     }
 
     fun read(file: File, verifyHash: Boolean = false): TmodMetadata =
         RandomAccessFile(file, "r").use { input ->
             fun integer(): Int = Integer.reverseBytes(input.readInt())
-            fun string(): String = readString { input.readUnsignedByte() }
+            fun string(): String = readString(input)
             val magic = ByteArray(4).also(input::readFully)
-            require(String(magic, Charsets.US_ASCII) == "TMOD") { "不是有效的 TMOD 模组" }
+            require(String(magic, Charsets.US_ASCII) == "TMOD") { "游戏模组格式无效" }
             val loader = string()
             require(
                 (loader.substringBefore('.').toIntOrNull() ?: 0) >= 1 || loader.startsWith("0.11")
             ) {
-                "不支持旧版 TMOD，请导入现代 tModLoader 模组"
+                "游戏模组格式过旧，请导入适用于新版 tModLoader 的模组"
             }
             val hash = ByteArray(20).also(input::readFully)
             input.seek(input.filePointer + 256)
@@ -106,31 +117,38 @@ object TmodReader {
             val hashStart = input.filePointer
             require(length >= 0 && input.length() - hashStart == length.toLong()) { "模组长度不匹配或已损坏" }
             val name = string()
-            require(name.matches(Regex("[A-Za-z_][A-Za-z0-9_]{0,127}"))) { "无效的模组内部名称" }
+            require(name.matches(modInternalName)) { "无效的模组内部名称" }
             val version = string()
             val count = integer()
             require(count in 1..100_000) { "模组文件表超出限制" }
-            data class Entry(
-                val name: String,
+            data class InfoEntry(
                 val length: Int,
                 val compressed: Int,
                 val offset: Long,
             )
-            val entries = ArrayList<Entry>()
+            // Buffer the sequential table reads, then seek directly to the Info payload.
+            val tableBuffer = object : BufferedInputStream(Channels.newInputStream(input.channel)) {
+                val unreadBytes get() = this.count - pos
+            }
+            val table = DataInputStream(tableBuffer)
+            var infoEntry: InfoEntry? = null
             var offset = 0L
             repeat(count) {
-                val path = string()
-                val unpacked = integer()
-                val packed = integer()
+                val path = readString(table)
+                val unpacked = Integer.reverseBytes(table.readInt())
+                val packed = Integer.reverseBytes(table.readInt())
                 require(unpacked >= 0 && packed >= 0) { "模组文件长度无效" }
-                entries.add(Entry(path, unpacked, packed, offset))
+                if (path == "Info") {
+                    if (infoEntry != null) throw IOException("缺少唯一的 Info 元数据")
+                    infoEntry = InfoEntry(unpacked, packed, offset)
+                }
                 offset += packed
-                require(offset <= input.length()) { "模组文件表越界" }
+                require(offset <= length) { "模组文件表越界" }
             }
-            val dataStart = input.filePointer
+            val dataStart = input.filePointer - tableBuffer.unreadBytes
             require(dataStart + offset == input.length()) { "模组数据区不完整" }
             val info =
-                entries.singleOrNull { it.name == "Info" } ?: throw IOException("缺少唯一的 Info 元数据")
+                infoEntry ?: throw IOException("缺少唯一的 Info 元数据")
             require(info.length <= 1024 * 1024 && info.compressed <= 1024 * 1024) { "模组元数据过大" }
             if (verifyHash) {
                 input.seek(hashStart)
@@ -177,7 +195,7 @@ object TmodReader {
                     "includeSource",
                 )
             DataInputStream(ByteArrayInputStream(bytes)).use { reader ->
-                fun text() = readString { reader.readUnsignedByte() }
+                fun text() = readString(reader)
                 while (true) {
                     val tag = text()
                     if (tag.isEmpty()) break
@@ -202,7 +220,7 @@ object TmodReader {
                         }
                         in textTags -> text()
                         in flags -> Unit
-                        else -> throw IOException("未知的 TMOD 元数据字段：$tag，请更新启动器")
+                        else -> throw IOException("未知的游戏模组元数据字段：$tag，请更新启动器")
                     }
                 }
             }
@@ -220,19 +238,19 @@ object TmodReader {
             )
         }
 
-    private fun readString(byte: () -> Int): String {
+    private fun readString(input: DataInput): String {
         var size = 0
         var shift = 0
         while (true) {
-            val next = byte()
-            require(shift < 28 || next <= 7) { "TMOD 字符串长度无效" }
+            val next = input.readUnsignedByte()
+            require(shift < 28 || next <= 7) { "游戏模组中的字符串长度无效" }
             size = size or ((next and 127) shl shift)
             if (next and 128 == 0) break
             shift += 7
-            require(shift <= 28) { "TMOD 字符串长度无效" }
+            require(shift <= 28) { "游戏模组中的字符串长度无效" }
         }
-        require(size in 0..262_144) { "TMOD 字符串过长" }
-        return ByteArray(size) { byte().toByte() }.toString(Charsets.UTF_8)
+        require(size in 0..262_144) { "游戏模组中的字符串过长" }
+        return ByteArray(size).also(input::readFully).toString(Charsets.UTF_8)
     }
 
     private fun inflateIcon(packed: ByteArray, expectedSize: Int): ByteArray =

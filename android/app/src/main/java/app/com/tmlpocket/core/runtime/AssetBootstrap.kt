@@ -4,6 +4,8 @@ import android.content.Context
 import android.system.Os
 import android.system.OsConstants
 import app.com.tmlpocket.feature.installation.GamePackageInstaller
+import app.com.tmlpocket.feature.installation.MobileTerrariaPackage
+import app.com.tmlpocket.feature.installation.GameStorage
 import app.com.tmlpocket.feature.mods.LegacyTouchMod
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
@@ -26,7 +28,7 @@ object AssetBootstrap {
     internal val cryptoLibraryMode = OsConstants.S_IRUSR or OsConstants.S_IXUSR
 
     @Synchronized
-    fun migrateTouchMod(context: Context) = LegacyTouchMod.migrate(File(context.filesDir, "userdata"))
+    fun migrateTouchMod(userData: File) = LegacyTouchMod.migrate(userData)
 
     @Synchronized
     fun prepareLauncher(context: Context): Pair<File, File> {
@@ -59,13 +61,18 @@ object AssetBootstrap {
     }
 
     fun prepare(context: Context, arguments: Array<String>): PreparedGame {
+        val storage = GameStorage(context)
+        val installer = GamePackageInstaller(storage.packageRoot)
         val installed =
-            GamePackageInstaller(context.filesDir).installation()
+            installer.installation(storage.instances().versionId())
                 ?: error("请先导入 Terraria 资源包和 tModLoader 发行包")
+        val controlArt = MobileTerrariaPackage.requireLaunchArt(
+            context, installed, installer.mobileTerrariaPackageName()
+        )
         val (runtimeRoot, launcherRoot) = prepareLauncher(context)
-        migrateTouchMod(context)
         val assembly = File(launcherRoot, "MobileLauncher.Host.dll")
-        val userData = File(context.filesDir, "userdata").apply { mkdirs() }
+        val userData = storage.userData().apply { mkdirs() }
+        migrateTouchMod(userData)
         return PreparedGame(
             assemblyPath = assembly.absolutePath,
             runtimeRoot = runtimeRoot.absolutePath,
@@ -74,6 +81,7 @@ object AssetBootstrap {
             tmlAssembly = File(installed.tmlRoot, "tModLoader.dll").absolutePath,
             contentDirectory = installed.contentRoot.absolutePath,
             terrariaDirectory = installed.terrariaRoot.absolutePath,
+            controlArtDirectory = controlArt?.absolutePath.orEmpty(),
             userDataDirectory = userData.absolutePath,
         )
     }

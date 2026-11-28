@@ -70,7 +70,7 @@ public class MobileJoystickPlayer
 		}
 
 		// Vanilla sees the fallback mouse press too. Preserve independent keyboard use.
-		if (MobileJoystickInput.HasAnyControlTouch && !KeyboardUseItemHeld()) {
+		if ((MobileJoystickInput.HasAnyControlTouch || MobileJoystickInput.HasExternalUiTouch) && !KeyboardUseItemHeld()) {
 			player.controlUseItem = false;
 		}
 		if (Main.playerInventory) player.controlUseItem = player.controlUseTile = false;
@@ -142,7 +142,10 @@ public class MobileJoystickPlayer
 		float aimDistance = config?.AimDistance ?? 440f;
 		Vector2 playerScreenCenter = MobileWorldInteraction.ToScreen(player.MountedCenter);
 		Vector2 cursor;
-		if (MobileJoystickInput.HasTouchAimPosition) {
+		if (MobileTrackpad.Enabled && !MobileJoystickInput.AttackHeld && !MobileJoystickInput.HasExplicitTouchAim) {
+			cursor = MobileTrackpad.ScreenPosition;
+		}
+		else if (MobileJoystickInput.HasTouchAimPosition) {
 			cursor = MobileJoystickInput.TouchAimPosition;
 		}
 		else {

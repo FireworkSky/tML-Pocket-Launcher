@@ -19,7 +19,7 @@ export const toolIds: Tool[] = [
 export const defaultPreferences: Preferences = {
   language: 'system',
   theme: 'system',
-  themeStyle: 'default',
+  themeStyle: 'tml',
   orientation: 'landscape',
   motion: true,
   background: 'none',

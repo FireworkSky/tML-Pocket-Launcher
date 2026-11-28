@@ -32,8 +32,8 @@ public partial class MobileInventorySystem : MobileSystem
 	private static MobileInventorySystem Instance => MobileControlsSession.Get<MobileInventorySystem>();
 	internal static bool Enabled => UiTextureAssets.Available
 		&& MobileJoystickConfig.Instance is { EnableMobileControls: true, UseMobileInventory: true };
-	private static bool SpecialEditor => Main.InReforgeMenu
-		|| Main.CreativeMenu.Enabled || Main.LocalPlayer.creativeInterface || Main.LocalPlayer.tileEntityAnchor.InUse || Main.hairWindow || Main.editChest || Main.editSign;
+	private static bool SpecialEditor => Main.CreativeMenu.Enabled || Main.LocalPlayer.creativeInterface
+		|| Main.LocalPlayer.tileEntityAnchor.InUse || Main.hairWindow || Main.editChest || Main.editSign;
 	private static bool MobileShop => Main.npcShop > 0 && Main.LocalPlayer.talkNPC >= 0;
 	internal static bool Active => Enabled && Main.playerInventory && !Main.gameMenu && !Main.ingameOptionsWindow && !Main.inFancyUI
 		&& !PlayerInput.UsingGamepadUI && !Instance.nativeView && !SpecialEditor && !MobileMenuSystem.EditingInterfaceLayout;
@@ -55,7 +55,7 @@ public partial class MobileInventorySystem : MobileSystem
 		return l.Apply(MobileInterfaceRegion.InventoryItems, l.RegionBounds(MobileInterfaceRegion.InventoryItems)).Contains(p.ToPoint())
 			|| l.Apply(MobileInterfaceRegion.CoinAmmo, l.RegionBounds(MobileInterfaceRegion.CoinAmmo)).Contains(p.ToPoint())
 			|| l.Apply(MobileInterfaceRegion.InventoryActions, l.RegionBounds(MobileInterfaceRegion.InventoryActions)).Contains(p.ToPoint())
-			|| (MobileShop ? l.ShopArea.Contains(p.ToPoint())
+			|| (MobileShop || Main.InReforgeMenu ? l.ShopArea.Contains(p.ToPoint())
 			: rightPage >= 0 && l.RightArea(Main.LocalPlayer.chest != -1).Contains(p.ToPoint()))
 			|| (!MobileShop && rightPage == 0 && l.Apply(MobileInterfaceRegion.Crafting, l.RegionBounds(MobileInterfaceRegion.Crafting)).Contains(p.ToPoint()))
 			|| (!MobileShop && rightPage == 1 && l.Apply(MobileInterfaceRegion.Equipment, l.RegionBounds(MobileInterfaceRegion.Equipment)).Contains(p.ToPoint()))
@@ -103,7 +103,7 @@ public partial class MobileInventorySystem : MobileSystem
 	{
 		if (!Active) return;
 		foreach (var layer in layers)
-			if (layer.Name is "Vanilla: Settings Button" or "Vanilla: Info Accessories Bar" || ((rightPage >= 0 || MobileShop) && (layer.Name == "Vanilla: Resource Bars" || layer.Name == "Vanilla: Map / Minimap"))) layer.Active = false;
+			if (layer.Name is "Vanilla: Settings Button" or "Vanilla: Info Accessories Bar" || ((rightPage >= 0 || MobileShop || Main.InReforgeMenu) && (layer.Name == "Vanilla: Resource Bars" || layer.Name == "Vanilla: Map / Minimap"))) layer.Active = false;
 		// Foreign panels are normally drawn after Vanilla inventory. The held
 		// material must remain visible while crossing their query slots.
 		layers.Add(new LegacyGameInterfaceLayer("MobileJoystick: Inventory Drag", () => {
@@ -116,6 +116,10 @@ public partial class MobileInventorySystem : MobileSystem
 	internal void ReadPointer()
 	{
 		inputVersion++;
+		if (!MobileShop) heldShopItem = null;
+		if (Enabled && Main.InReforgeMenu && (!Main.playerInventory || Main.LocalPlayer.talkNPC < 0
+			|| Main.LocalPlayer.chest != -1 || Main.npcShop != 0 || Main.InGuideCraftMenu))
+			CloseReforge();
 		UpdateGuideSession();
 		pointerCancelled = false;
 		if (!Main.playerInventory || !Main.hasFocus) {
@@ -168,6 +172,11 @@ public partial class MobileInventorySystem : MobileSystem
 			break;
 		}
 		if (touchId >= 0 && !touchInput) { pointerDown = false; touchId = -1; pointerCancelled = true; }
+		if (MobileTrackpad.Enabled) {
+			bool cursorDown = MobileTrackpad.ReadPointer(ref pointer);
+			if (!cursorDown) pointerNeedsRelease = false;
+			pointerDown = cursorDown && !pointerNeedsRelease;
+		}
 		// Several input updates can precede a draw. Retain an edge until the
 		// inventory consumes it instead of overwriting a quick tap's press.
 		pointerPressed |= pointerDown && !previous;
@@ -216,10 +225,12 @@ public partial class MobileInventorySystem : MobileSystem
 			else if (leftPage == 1) DrawHousing();
 			else DrawPvp();
 			if (MobileShop) DrawShop();
+			else if (Main.InReforgeMenu) DrawReforge();
 			else if (rightPage == 0) DrawCrafting();
 			else if (rightPage == 1) { DrawEquipment(); DrawInfoToggles(); }
 			else if (rightPage == 2 && Main.LocalPlayer.chest != -1) DrawContainer();
 			DrawInventoryGesture(fresh);
+			if (Main.InReforgeMenu) Main.reforgeItem = reforgeSlot[0];
 			SyncGuideQuerySlot();
 			if (itemDetailsSource.HasValue) DrawRecipeDetails();
 			if (leftPage == 0) Main.LocalPlayer.trashItem = trashSlot[0];
@@ -250,7 +261,7 @@ public partial class MobileInventorySystem : MobileSystem
 				leftPage = index; Main.EquipPage = index == 1 ? 1 : 0;
 			}
 		}
-		if (MobileShop) return;
+		if (MobileShop || Main.InReforgeMenu || guideSession) return;
 		for (int i = 0; i < 2; i++) {
 			if (NavigationButton(layout.RightTab(i), i == 0 ? "Craft" : "Equipment", i == 0 ? T("Crafting") : T("Equipment"), rightPage == i)) {
 				if (i == 0 && rightPage == 0) ToggleCraftingSize();

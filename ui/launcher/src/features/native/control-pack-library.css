@@ -1,0 +1,52 @@
+.has-native-workspace > .main:only-child {
+  grid-column: 1 / -1;
+}
+.control-pack-library {
+  padding: clamp(14px, 3vw, 24px);
+  display: grid;
+  gap: 14px;
+}
+.control-pack-library header,
+.control-pack-library article,
+.control-pack-library form,
+.control-pack-library .pack-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.control-pack-library article {
+  justify-content: space-between;
+}
+.control-pack-library button {
+  min-height: 44px;
+}
+.control-pack-library article > div {
+  min-width: 0;
+  max-width: 100%;
+}
+.control-pack-library article {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+.control-pack-library form {
+  align-items: end;
+}
+.control-pack-library label {
+  display: grid;
+  gap: 4px;
+  flex: 1 1 150px;
+}
+.control-pack-library input {
+  width: 100%;
+  min-width: 0;
+}
+.control-pack-library h3,
+.control-pack-library h4,
+.control-pack-library p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.control-pack-library small {
+  color: var(--muted);
+}

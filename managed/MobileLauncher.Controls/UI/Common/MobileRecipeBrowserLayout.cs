@@ -18,7 +18,9 @@ public sealed partial class MobileExternalUiSystem
 
 	public override void Load()
 	{
-		if (!Main.dedServ) On_UserInterface.Update += UpdateBrowser;
+		if (Main.dedServ) return;
+		On_UserInterface.Update += UpdateExternalInterface;
+		LoadForeignInterfaces();
 	}
 
 	private static void FindBrowserLayout(Assembly code)
@@ -37,7 +39,11 @@ public sealed partial class MobileExternalUiSystem
 
 	// All optional mods have created their UI by this stage, regardless of
 	// PostSetupContent ordering. Drawing and hit tests share the real UIElement.
-	public override void PostAddRecipes() => RegisterBrowserLayout();
+	public override void PostAddRecipes()
+	{
+		RegisterBrowserLayout();
+		RegisterBossLogButton();
+	}
 
 	private static void RegisterBrowserLayout()
 	{
@@ -105,8 +111,9 @@ public sealed partial class MobileExternalUiSystem
 		}
 	}
 
-	private static void UpdateBrowser(On_UserInterface.orig_Update orig, UserInterface self, GameTime time)
+	private static void UpdateExternalInterface(On_UserInterface.orig_Update orig, UserInterface self, GameTime time)
 	{
+		if (Main.ingameOptionsWindow && IsForeignState(self.CurrentState) && MobileMenuSystem.EditingInterfaceLayout) return;
 		if (RecipeBrowserRoot is UIElement root && ReferenceEquals(browserInterface?.GetValue(root), self)
 			&& (MobileMenuSystem.EditingInterfaceLayout || MobileInventorySystem.HasItemGesture)) return;
 		orig(self, time);
@@ -123,7 +130,7 @@ public sealed partial class MobileExternalUiSystem
 
 	private static void UnloadBrowserLayout()
 	{
-		if (!Main.dedServ) On_UserInterface.Update -= UpdateBrowser;
+		if (!Main.dedServ) On_UserInterface.Update -= UpdateExternalInterface;
 		if (subscribedBrowser != null) subscribedBrowser.OnLeftClick -= BrowserClicked;
 		subscribedBrowser = null;
 		browserPanel = favoritesPanel = browserConfig = browserInterface = null;

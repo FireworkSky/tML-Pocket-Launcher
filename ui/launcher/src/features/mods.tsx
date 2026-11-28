@@ -9,6 +9,7 @@ import {
   WorkspaceTabs,
 } from '../components/ui';
 import { filterCatalog, needsUpdate, defaultFilters } from '../domain/mods';
+import { compareInstalledMods, ModSortSelect } from './mod-sort';
 import { CatalogFilters, useModActions } from './mod-actions';
 import { PacksPanel } from './packs';
 import type { Mod } from '../domain/types';
@@ -53,7 +54,7 @@ export function ModsPage() {
   );
 }
 function LocalMods() {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const {
     state,
     installed,
@@ -73,13 +74,7 @@ function LocalMods() {
         (state.localFilter === 'all' || mod.enabled === (state.localFilter === 'enabled')) &&
         `${mod.title} ${mod.id} ${mod.author} ${mod.kind}`.toLocaleLowerCase().includes(query),
     )
-    .sort((a, b) =>
-      state.localSort === 'enabled'
-        ? Number(b.enabled) - Number(a.enabled)
-        : state.localSort === 'updated'
-          ? (b.changed || 0) - (a.changed || 0)
-          : a.title.localeCompare(b.title, 'zh-CN'),
-    );
+    .sort(compareInstalledMods(state.localSort, locale));
   const menu = () =>
     openDialog({
       title: t('本地模组操作'),
@@ -92,24 +87,6 @@ function LocalMods() {
           <Button data-action="mw-disable-all" onClick={() => bulk(false)}>
             {t('全部停用')}
           </Button>
-          {(
-            [
-              ['name', '按名称排序'],
-              ['enabled', '已启用优先'],
-              ['updated', '最近变更优先'],
-            ] as const
-          ).map(([localSort, label]) => (
-            <Button
-              key={localSort}
-              data-action={`mw-sort-${localSort}`}
-              onClick={() => {
-                update((current) => ({ ...current, localSort }));
-                closeDialog();
-              }}
-            >
-              {t(label)}
-            </Button>
-          ))}
           <Button data-action="mod-folder" onClick={() => showInfo('mod-folder')}>
             {t('查看模组目录')}
           </Button>
@@ -144,7 +121,7 @@ function LocalMods() {
         </label>
         <IconButton
           symbol="sliders"
-          label={t('模组批量操作与排序')}
+          label={t('模组批量操作')}
           data-action="mw-local-menu"
           onClick={menu}
         />
@@ -169,6 +146,7 @@ function LocalMods() {
             </Button>
           ))}
         </div>
+        <ModSortSelect />
         <Button className="mod-text-action" data-action="mw-update-all" onClick={updateAll}>
           <Icon name="download" />
           {t('检查更新')}
@@ -179,7 +157,7 @@ function LocalMods() {
           <EmptyState
             symbol="mod"
             title={t('添加你的第一个模组')}
-            description={t('可以直接浏览和下载模组，也可以导入本地 .tmod 文件。')}
+            description={t('可以浏览和下载游戏模组，也可以从本地导入。')}
           >
             <Button
               variant="soft"

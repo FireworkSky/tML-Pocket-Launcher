@@ -13,7 +13,8 @@ enum TmlPocketAndroidEventKind : std::int32_t {
     TML_POCKET_ANDROID_EVENT_LAUNCHER_ACTION = 7,
     TML_POCKET_ANDROID_EVENT_IME_COMMIT = 8,
     TML_POCKET_ANDROID_EVENT_IME_COMPOSITION = 9,
-    TML_POCKET_ANDROID_EVENT_IME_VISIBILITY = 10
+    TML_POCKET_ANDROID_EVENT_IME_VISIBILITY = 10,
+    TML_POCKET_ANDROID_EVENT_KEYBOARD_REQUEST = 11
 };
 
 struct TmlPocketAndroidEvent {
@@ -45,9 +46,12 @@ int tml_pocket_bridge_set_ime_visible(int visible);
 int tml_pocket_bridge_show_toast(const char* message, int long_duration);
 int tml_pocket_bridge_set_startup_status(const char* title, const char* detail, int progress_percent);
 int tml_pocket_bridge_hide_startup_status();
+void tml_pocket_bridge_report_frame_rate(int fps);
 int tml_pocket_bridge_has_permission(const char* permission);
 int tml_pocket_bridge_request_permission(const char* permission, int request_code);
 int tml_pocket_bridge_begin_text_prompt(const char* title, int password, int request_code);
 int tml_pocket_bridge_poll_event(TmlPocketAndroidEvent* event);
+int tml_pocket_bridge_take_back();
+int tml_pocket_bridge_take_keyboard_request();
 
 }

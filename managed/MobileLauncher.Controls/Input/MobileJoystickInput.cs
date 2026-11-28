@@ -50,17 +50,22 @@ public enum MobileControlAction
 	LauncherControl,
 	KeyboardKey,
 	ToggleGameControls,
-	MapAlphaCycle
+	MapAlphaCycle,
+	TogglePointerMode,
+	PerformanceDisplay,
+	ShowKeyboard
 }
 
 internal readonly struct MobileControlButton
 {
 	public MobileControlButton(MobileControlAction action, string textureName, Vector2 center, float radius,
 		string id = null, bool multitouch = true, IReadOnlyList<MobileControlAction> radialActions = null, string modKeybind = null, IReadOnlyList<string> radialModKeybinds = null,
-		MobileLauncherControl launcher = null, Vector2 dimensions = default, string keyboardKey = null, IReadOnlyList<string> radialKeyboardKeys = null)
+		MobileLauncherControl launcher = null, Vector2 dimensions = default, string keyboardKey = null, IReadOnlyList<string> radialKeyboardKeys = null,
+		string customTexture = null)
 	{
 		Action = action;
 		TextureName = textureName;
+		CustomTexture = customTexture;
 		Center = center;
 		Radius = radius;
 		Id = id;
@@ -77,6 +82,7 @@ internal readonly struct MobileControlButton
 	public MobileControlAction Action { get; }
 
 	public string TextureName { get; }
+	public string CustomTexture { get; }
 
 	public Vector2 Center { get; }
 
@@ -102,7 +108,7 @@ internal readonly struct MobileControlButton
 		: Vector2.DistanceSquared(point, Center) <= Radius * Radius;
 }
 
-internal readonly record struct MobileControlStick(string Id, MobileJoystickRole Role, Vector2 Center, float Radius, string TextureName = null);
+internal readonly record struct MobileControlStick(string Id, MobileJoystickRole Role, Vector2 Center, float Radius, string TextureName = null, string CustomTexture = null);
 
 internal readonly struct MobileControlLayout
 {
@@ -162,6 +168,8 @@ internal static partial class MobileJoystickInput
 	private static readonly HashSet<int> currentTouchFingerIds = new();
 	private static readonly HashSet<MobileControlAction> CurrentActions = new();
 	private static readonly HashSet<MobileControlAction> PreviousActions = new();
+	private static readonly HashSet<int> externalUiContacts = new();
+	internal static bool HasExternalUiTouch => externalUiContacts.Count != 0;
 	private static readonly HashSet<MobileControlAction> PressedActions = new();
 
 	private static int joystickFingerId = int.MinValue;
@@ -196,6 +204,7 @@ internal static partial class MobileJoystickInput
 		+ (previousAimOrigin.HasValue ? MobileWorldInteraction.ToScreen(Main.LocalPlayer.MountedCenter) - previousAimOrigin.Value : Vector2.Zero);
 
 	public static bool HasTouchAimPosition => interactHasAim || hasTouchAimPosition;
+	internal static bool HasExplicitTouchAim => interactHasAim || launcherCursorActive;
 
 	internal static Vector2 TouchCrosshairPosition => MobileWorldInteraction.DirectUseHeld
 		? MobileWorldInteraction.PrecisionPosition
@@ -259,6 +268,8 @@ internal static partial class MobileJoystickInput
 		currentTouchFingerIds.Clear();
 		CurrentActions.Clear();
 		PreviousActions.Clear();
+		externalUiContacts.Clear();
+		MobileControlAvoidance.Clear();
 		PressedActions.Clear();
 		joystickFingerId = attackFingerId = int.MinValue;
 		activeMoveStick = activeAimStick = default;
@@ -279,8 +290,9 @@ internal static partial class MobileJoystickInput
 
 	internal static bool IsButtonAvailable(MobileControlButton button)
 	{
+		if (MobileKeyboardButton.IsDedicated(button)) return false; // Drawn and captured above menus as well as gameplay.
 		if (ControlsHidden && !IsControlVisibilityToggle(button)) return false;
-		if (MobileExternalUiSystem.BlocksInventory(button.Center)) return false;
+		if (MobileControlAvoidance.Obscures(button) || MobileExternalUiSystem.BlocksInventory(button.Center)) return false;
 		if (MobileChatSystem.BlocksControl(button.Center) && button.Action != MobileControlAction.Chat) return false;
 		if (button.Launcher != null) return button.Launcher.Flag("isVisible", true) && !Main.mapFullscreen && !Main.playerInventory && !MobileInventorySystem.BlocksControl(button.Center);
 		if (Main.mapFullscreen) return button.Action is MobileControlAction.Chat or MobileControlAction.Map or MobileControlAction.MapStyle
@@ -288,6 +300,15 @@ internal static partial class MobileJoystickInput
 		if (Main.playerInventory && button.Action is MobileControlAction.Inventory or MobileControlAction.Settings
 			or MobileControlAction.Chat or MobileControlAction.Map or MobileControlAction.MapStyle) return false;
 		return !MobileInventorySystem.BlocksControl(button.Center);
+	}
+
+	internal static bool IsStickAvailable(MobileControlStick stick)
+	{
+		if (ControlsHidden || stick.Radius <= 0f) return false;
+		// A panel opened during an existing drag must not cancel that finger.
+		if (stick.Role == MobileJoystickRole.Move && joystickFingerId != int.MinValue && activeMoveStick == stick
+			|| stick.Role == MobileJoystickRole.Aim && attackFingerId != int.MinValue && activeAimStick == stick) return true;
+		return !MobileControlAvoidance.Obscures(stick) && !MobileExternalUiSystem.BlocksInventory(stick.Center);
 	}
 
 	private static bool IsControlVisibilityToggle(MobileControlButton button)
@@ -307,6 +328,9 @@ internal static partial class MobileJoystickInput
 		MobileJoystickConfig config = MobileJoystickConfig.Instance;
 		if (!Main.hasFocus) waitForMouseRelease = true;
 		EnabledThisFrame = ShouldUseControls(config);
+		if (EnabledThisFrame) MobileControlAvoidance.Update();
+		else MobileControlAvoidance.Clear();
+		if (!Main.hasFocus) externalUiContacts.Clear();
 		MobileModKeybinds.BeginFrame();
 		MobileKeyboardBindings.BeginFrame();
 		PreviousActions.Clear();
@@ -349,8 +373,15 @@ internal static partial class MobileJoystickInput
 		ReadTouchContacts(config);
 		MobileChatSystem.UpdateInput();
 		Contacts.RemoveAll(contact => MobileChatSystem.OwnsContact(contact.Id));
-		Contacts.RemoveAll(contact => MobileExternalUiSystem.BlocksInventory(contact.Position)
-			&& !MobileInventorySystem.OwnsContact(contact.Id) && contact.Id != joystickFingerId && contact.Id != attackFingerId);
+		externalUiContacts.RemoveWhere(id => id == MouseContactId ? !mouseWasDown : !currentTouchFingerIds.Contains(id));
+		Contacts.RemoveAll(contact => {
+			if (contact.Id == joystickFingerId || contact.Id == attackFingerId || MobileInventorySystem.OwnsContact(contact.Id))
+				return false;
+			if (externalUiContacts.Contains(contact.Id)) return true;
+			bool overPanel = MobileExternalUiSystem.BlocksInventory(contact.Position);
+			if (overPanel && contact.State == TouchLocationState.Pressed) externalUiContacts.Add(contact.Id);
+			return overPanel;
+		});
 		MobileCalamityUiSystem.ReadInput(Contacts);
 		Contacts.RemoveAll(contact => MobileCalamityUiSystem.OwnsContact(contact.Id));
 		if (MobileCalamityUiSystem.Dragging) {
@@ -379,7 +410,8 @@ internal static partial class MobileJoystickInput
 		ApplyImmediateActions();
 		// Cache the logical aim before native world/UI zoom contexts restore the
 		// input. Movement, jump and toolbar fingers must never become the aim.
-		if ((HasAnyControlTouch || hasTouchAimPosition && Contacts.Count == 0 && MobileTouchInput.UsingTouch)
+		if ((!MobileTrackpad.Enabled && (HasAnyControlTouch || hasTouchAimPosition && Contacts.Count == 0 && MobileTouchInput.UsingTouch)
+			|| MobileTrackpad.Enabled && (AttackHeld || HasExplicitTouchAim))
 			&& !Main.playerInventory && !Main.mapFullscreen && Main.LocalPlayer.talkNPC < 0
 			&& !MobileExternalUiSystem.BlocksInventory(new Vector2(Main.mouseX, Main.mouseY))) {
 			MobileJoystickPlayer.ApplyTouchAim();
@@ -412,18 +444,34 @@ internal static partial class MobileJoystickInput
 			return true;
 		}
 
-		if (TouchesStick(contact)) return true;
+		return HitsDirectControl(contact, Layout);
+	}
 
-		foreach (MobileControlButton button in Layout.Buttons) {
+	internal static bool StartsOnDirectControl(TouchLocation touch)
+	{
+		var config = MobileJoystickConfig.Instance;
+		if (!ShouldUseControls(config) || !config.EnableTouchInput) return false;
+		var contact = new MobileTouchContact(touch.Id, ScaleTouchPosition(touch.Position), touch.State);
+		return !MobileInventorySystem.BlocksControl(contact.Position)
+			&& !MobileChatSystem.BlocksControl(contact.Position)
+			&& !MobileExternalUiSystem.BlocksInventory(contact.Position)
+			&& HitsDirectControl(contact, CreateLayout(config));
+	}
+
+	private static bool HitsDirectControl(MobileTouchContact contact, MobileControlLayout layout)
+	{
+		if (TouchesStick(contact, layout)) return true;
+		foreach (MobileControlButton button in layout.Buttons) {
 			if (IsButtonAvailable(button) && button.Contains(contact.Position)) {
 				return true;
 			}
 		}
 
-		if (Main.playerInventory || ControlsHidden) return false;
+		if (Main.playerInventory || ControlsHidden || MobileTrackpad.Enabled && Main.mapFullscreen) return false;
 		MobileHotbarLayout hotbar = MobileJoystickLayout.CreateHotbarLayout(MobileJoystickConfig.Instance);
 		for (int i = 0; i < 10; i++) {
-			if (hotbar.GetSlot(i).Contains(contact.Position.ToPoint())) {
+			Rectangle slot = hotbar.GetSlot(i);
+			if (slot.Contains(contact.Position.ToPoint()) && !MobileControlAvoidance.Obscures(slot)) {
 				return true;
 			}
 		}
@@ -459,7 +507,7 @@ internal static partial class MobileJoystickInput
 			: MobileJoystickLayout.CreateControlsLayout(config, Main.screenWidth, Main.screenHeight);
 		if (!ControlsHidden || layout.Buttons.Any(IsControlVisibilityToggle)) return layout;
 		MobileHotbarLayout hotbar = MobileJoystickLayout.CreateHotbarLayout(config);
-		float radius = hotbar.SideButtonSize * .5f * hotbar.EffectiveScale / Math.Max(.01f, hotbar.Scale);
+		float radius = hotbar.SettingsButton.Width * .5f;
 		MobileControlButton restore = new(MobileControlAction.ToggleGameControls, "Settings", hotbar.SettingsButton.Center.ToVector2(), radius);
 		return new MobileControlLayout(layout.JoystickCenter, layout.JoystickRadius, layout.AttackCenter, layout.AttackRadius,
 			layout.Buttons.Append(restore).ToArray(), layout.Scale, layout.Sticks);
@@ -474,7 +522,8 @@ internal static partial class MobileJoystickInput
 				continue;
 			}
 			for (int i = 0; i < 10; i++) {
-				if (hotbar.GetSlot(i).Contains(contact.Position.ToPoint())) {
+				Rectangle slot = hotbar.GetSlot(i);
+				if (slot.Contains(contact.Position.ToPoint()) && !MobileControlAvoidance.Obscures(slot)) {
 					Main.LocalPlayer.selectedItem = i;
 					HasAnyControlTouch = true;
 					break;
@@ -487,7 +536,7 @@ internal static partial class MobileJoystickInput
 	{
 		currentTouchFingerIds.Clear();
 		if (config.EnableTouchInput) {
-			TouchCollection touches = MobileTouchInput.GetState();
+			TouchCollection touches = MobileTrackpad.Enabled ? MobileTrackpad.ControlContacts : MobileTouchInput.GetState();
 			for (int i = 0; i < touches.Count; i++) {
 				TouchLocation touch = touches[i];
 				Vector2 position = ScaleTouchPosition(touch.Position);
@@ -508,7 +557,7 @@ internal static partial class MobileJoystickInput
 		// The launcher maps a real touch to Main.mouseLeft. Do not add it twice,
 		// or let that synthetic hold become a fallback finger after touch-up.
 		if (Contacts.Count > 0 && Main.mouseLeft) waitForMouseRelease = true;
-		bool fallbackDown = config.EnableMouseFallback && Main.mouseLeft && !waitForMouseRelease && Contacts.Count == 0;
+		bool fallbackDown = !MobileTrackpad.Enabled && config.EnableMouseFallback && Main.mouseLeft && !waitForMouseRelease && Contacts.Count == 0;
 		if (fallbackDown) {
 			Contacts.Add(new MobileTouchContact(MouseContactId, new Vector2(Main.mouseX, Main.mouseY),
 				mouseWasDown ? TouchLocationState.Moved : TouchLocationState.Pressed));
@@ -519,7 +568,7 @@ internal static partial class MobileJoystickInput
 		mouseWasDown = fallbackDown;
 	}
 
-	private static Vector2 ScaleTouchPosition(Vector2 position)
+	internal static Vector2 ScaleTouchPosition(Vector2 position)
 	{
 		float displayWidth = TouchPanel.DisplayWidth <= 0 ? PlayerInput.RealScreenWidth : TouchPanel.DisplayWidth;
 		float displayHeight = TouchPanel.DisplayHeight <= 0 ? PlayerInput.RealScreenHeight : TouchPanel.DisplayHeight;
@@ -579,7 +628,7 @@ internal static partial class MobileJoystickInput
 				|| IsBlockedByExclusiveControl(contact.Id)) continue;
 
 			foreach (MobileControlStick stick in Layout.Sticks) {
-                if (stick.Radius <= 0f || Vector2.DistanceSquared(contact.Position, stick.Center) > stick.Radius * stick.Radius) continue;
+                if (!IsStickAvailable(stick) || Vector2.DistanceSquared(contact.Position, stick.Center) > stick.Radius * stick.Radius) continue;
                 if (stick.Role == MobileJoystickRole.Move && joystickFingerId == int.MinValue) {
                     joystickFingerId = contact.Id;
                     activeMoveStick = stick;
@@ -720,9 +769,11 @@ internal static partial class MobileJoystickInput
 
 			foreach (MobileControlButton button in Layout.Buttons) {
 				if (button.Action is MobileControlAction.LauncherControl or MobileControlAction.Interact or MobileControlAction.Grapple or MobileControlAction.QuickPotions or MobileControlAction.Zoom or MobileControlAction.RadialMenu or MobileControlAction.Unbound) continue;
+				if (button.Action == MobileControlAction.TogglePointerMode
+					&& (contact.Id < 0 || contact.State != TouchLocationState.Pressed)) continue;
 				// Closing the bag exposes this HUD button beneath the same contact.
 				// A held or moved contact must not immediately open it again.
-				if (button.Action is MobileControlAction.Inventory or MobileControlAction.Chat or MobileControlAction.Map or MobileControlAction.MapStyle
+				if (button.Action is MobileControlAction.Inventory or MobileControlAction.Chat or MobileControlAction.Map or MobileControlAction.MapStyle or MobileControlAction.PerformanceDisplay
 					&& contact.State != TouchLocationState.Pressed) continue;
 				if (!IsButtonAvailable(button) || !button.Contains(contact.Position)) {
 					continue;
@@ -777,10 +828,13 @@ internal static partial class MobileJoystickInput
 	}
 
     private static bool TouchesStick(MobileTouchContact contact)
+        => TouchesStick(contact, Layout);
+
+    private static bool TouchesStick(MobileTouchContact contact, MobileControlLayout layout)
     {
-        if (Layout.Sticks == null) return false;
-        foreach (var stick in Layout.Sticks)
-            if (stick.Role is MobileJoystickRole.Move or MobileJoystickRole.Aim && stick.Radius > 0f
+        if (layout.Sticks == null) return false;
+        foreach (var stick in layout.Sticks)
+            if (stick.Role is MobileJoystickRole.Move or MobileJoystickRole.Aim && IsStickAvailable(stick)
                 && Vector2.DistanceSquared(contact.Position, stick.Center) <= stick.Radius * stick.Radius) return true;
         return false;
     }
@@ -836,6 +890,12 @@ internal static partial class MobileJoystickInput
 	private static void ApplyImmediateActions()
 	{
 		Player player = Main.LocalPlayer;
+		if (WasActionPressed(MobileControlAction.ShowKeyboard)) MobileTextInputSystem.ShowKeyboard();
+		if (WasActionPressed(MobileControlAction.TogglePointerMode)) TogglePointerMode();
+		if (WasActionPressed(MobileControlAction.PerformanceDisplay)) {
+			MobilePerformanceHud.Cycle();
+			SoundEngine.PlaySound(SoundID.MenuTick);
+		}
 
 		if (WasActionPressed(MobileControlAction.Inventory)) {
 			player.ToggleInv();
@@ -917,6 +977,24 @@ internal static partial class MobileJoystickInput
 	{
 		StatusText = text;
 		statusTextTime = StatusTextFrames;
+	}
+
+	private static void TogglePointerMode()
+	{
+		var config = MobileJoystickConfig.Instance;
+		bool wasTrackpad = config.ShowMouseCursor;
+		config.ShowMouseCursor = !wasTrackpad;
+		try { config.SaveFromMobileMenu(); }
+		catch (Exception error) when (error is System.IO.IOException or UnauthorizedAccessException) {
+			config.ShowMouseCursor = wasTrackpad;
+			MobileControlsSession.Logger.Warn("Unable to save pointer mode", error);
+			ShowStatusText(MobileSettingsCatalog.Text("UnableToSaveSettings"));
+			return;
+		}
+		if (wasTrackpad) MobileTrackpad.SuppressDirectPointerUntilRelease();
+		Main.mouseLeft = PlayerInput.Triggers.Current.MouseLeft = PlayerInput.Triggers.JustPressed.MouseLeft = false;
+		ShowStatusText(MobileSettingsCatalog.Text(wasTrackpad ? "DirectTouchMode" : "TrackpadMode"));
+		SoundEngine.PlaySound(SoundID.MenuTick);
 	}
 
 	private static void CycleAimStickMode()

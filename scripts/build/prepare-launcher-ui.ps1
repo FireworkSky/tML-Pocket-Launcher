@@ -9,10 +9,35 @@ if (-not $assetRoot.StartsWith($repoRoot + [IO.Path]::DirectorySeparatorChar, [S
 }
 Push-Location $uiRoot
 try {
-    # Use Node directly so Windows PowerShell npm execution policies do not affect builds.
-    $node = (Get-Command node -ErrorAction Stop).Source
+    # Android Studio may not inherit Node added to a terminal-only PATH. NODE_PATH
+    # still identifies the installation's module directory on this machine.
+    $nodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue
+    $node = if ($nodeCommand) { $nodeCommand.Source } else { $null }
+    $nodeRoot = if ($node) { Split-Path -Parent $node } else { $null }
+    if (-not $node -and $env:NODE_HOME) {
+        $candidate = Join-Path $env:NODE_HOME 'node.exe'
+        if (Test-Path -LiteralPath $candidate) {
+            $node = $candidate
+            $nodeRoot = $env:NODE_HOME
+        }
+    }
+    if (-not $node -and $env:NODE_PATH) {
+        foreach ($moduleDirectory in ($env:NODE_PATH -split [IO.Path]::PathSeparator)) {
+            $candidate = Join-Path (Split-Path -Parent $moduleDirectory) 'node.exe'
+            if (Test-Path -LiteralPath $candidate) {
+                $node = $candidate
+                $nodeRoot = Split-Path -Parent $candidate
+                break
+            }
+        }
+    }
+    if (-not $node) { throw 'Node.js was not found. Add node.exe to PATH or set NODE_HOME/NODE_PATH.' }
+
     if (-not (Test-Path -LiteralPath 'node_modules/vite/bin/vite.js')) {
-        & npm.cmd ci
+        $npmCommand = Get-Command npm.cmd -ErrorAction SilentlyContinue
+        $npm = if ($npmCommand) { $npmCommand.Source } else { Join-Path $nodeRoot 'npm.cmd' }
+        if (-not (Test-Path -LiteralPath $npm)) { throw "npm.cmd was not found beside Node.js: $nodeRoot" }
+        & $npm ci
         if ($LASTEXITCODE -ne 0) { throw 'UI dependency installation failed' }
     }
     & $node 'node_modules/typescript/lib/tsc.js' --noEmit

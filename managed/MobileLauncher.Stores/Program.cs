@@ -42,12 +42,18 @@ async Task HandleAsync(TcpClient socket)
             var method = request["method"]!.GetValue<string>();
             var data = request["params"]?.AsObject() ?? [];
             if (method == "cancel") { download?.Cancel(); await ReplyAsync(true); return; }
-            await gate.WaitAsync(); entered = true;
+            // Ownership checks use a generation-checked Steam session and can run during a transfer.
+            if (method != "steam.verify")
+            {
+                await gate.WaitAsync();
+                entered = true;
+            }
             object? result;
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(method == "steam.probe" ? 120 : 90));
             var ct = timeout.Token;
             switch (method)
             {
+                case "tml.resources": result = TmlResources.Read(data["assembly"]!.GetValue<string>()); break;
                 case "status": result = new { steam = steam.Snapshot(true), gog = gog.Snapshot(true) }; break;
                 case "steam.login": steam.Begin(data); result = steam.Snapshot(); break;
                 case "steam.guard": steam.SubmitCode(data["code"]!.GetValue<string>()); result = steam.Snapshot(); break;
@@ -105,7 +111,7 @@ async Task HandleAsync(TcpClient socket)
                             }
                             else
                             {
-                                var archive = method == "steam.download" ? await steam.DownloadAsync(root, Progress, task.Token)
+                                var archive = method == "steam.download" ? await steam.DownloadAsync(root, Progress, task.Token, data["installedContent"]?.GetValue<string>())
                                     : method == "gog.import" ? await GogSession.ImportAsync(root, data["file"]!.GetValue<string>(), Progress, task.Token)
                                     : await gog.DownloadAsync(data["id"]!.ToString(), root, Progress, task.Token);
                                 result = new { archive };

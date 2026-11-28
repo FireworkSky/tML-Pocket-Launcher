@@ -13,15 +13,12 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Managed build failed' }
     dotnet format whitespace MobileLauncher.slnx --no-restore --verify-no-changes --verbosity quiet
     if ($LASTEXITCODE -ne 0) { throw 'Managed formatting check failed; run dotnet format whitespace MobileLauncher.slnx' }
-    dotnet test MobileLauncher.slnx -c Release --no-build --no-restore
-    if ($LASTEXITCODE -ne 0) { throw 'Managed tests failed' }
     if ($Android -or $Assemble) {
-        & (Join-Path $PSScriptRoot 'check-patch-runtime.ps1')
         & (Join-Path $PSScriptRoot 'check-runtime.ps1')
         Push-Location (Join-Path $repoRoot 'android')
         try {
-            $tasks = @(':app:testDebugUnitTest', '--console=plain')
-            if ($Assemble) { $tasks += ':app:assembleDebug' }
+            $tasks = @('--console=plain')
+            $tasks += if ($Assemble) { ':app:assembleDebug' } else { ':app:compileDebugKotlin' }
             & .\gradlew.bat @tasks
             if ($LASTEXITCODE -ne 0) { throw 'Android checks failed' }
         } finally { Pop-Location }

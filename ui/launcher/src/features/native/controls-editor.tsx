@@ -1,23 +1,22 @@
-import {
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type MouseEvent,
-  type PointerEvent,
-} from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Button, Icon, Switch } from '../../components/ui';
+import { LabeledSelect } from '../../components/form-controls';
 import { useTranslation } from '../../i18n';
 import { nativeRequest } from '../../native/bridge';
+import type { ControlArtworkMap } from './control-artwork';
 import { useLauncher } from '../../state/launcher';
 import {
   componentTypes,
-  ExtendedControlFields,
+  ControlBindings,
+  ControlTexturePicker,
+  RadialPreview,
   Range,
-  texturePreview,
   type ControlData,
 } from './controls-properties';
+import { useLayoutGesture } from './use-layout-gesture';
+import { useFloatingPosition } from './use-floating-position';
+import { ButtonSurface } from './game-button';
 
 type Category = 'controls' | 'interface';
 type Viewport = { width: number; height: number };
@@ -28,6 +27,7 @@ type Control = {
   JoystickRole?: number | string;
   Action?: number | string;
   TextureName?: string;
+  CustomTexture?: string;
   X: number;
   Y: number;
   Size: number;
@@ -37,7 +37,7 @@ type Control = {
   RadialActions?: (number | string)[];
   RadialKeyboardKeys?: string[];
   RadialModKeybinds?: string[];
-  Launcher?: { Data: ControlData; Assets?: Record<string, string> } | null;
+  Launcher?: { Data: ControlData } | null;
 };
 type Preset = { Name: string; Controls: Control[] };
 type Profile = {
@@ -62,19 +62,6 @@ type Profile = {
   HideGameControls?: boolean;
 };
 type PreviewScene = 'world' | 'hotbar' | 'inventory' | 'crafting';
-type CanvasGesture = {
-  id: string;
-  pointer: number;
-  mode: 'move' | 'resize';
-  offsetX: number;
-  offsetY: number;
-  startWidth: number;
-  startHeight: number;
-  clientX: number;
-  clientY: number;
-  moved: boolean;
-};
-
 const layoutKeys = [
   'ControlLayout',
   'ActiveCustomPresetIndex',
@@ -113,7 +100,7 @@ function hotbarGeometry(profile: Profile, viewport: Viewport) {
   const settingsY = top + (slot + gap) * (horizontal ? 1 : 4);
   return {
     inset,
-    left: Math.max(inset, Math.trunc(viewport.width * 0.056)),
+    left: Math.max(inset, Math.trunc(viewport.width * 0.047)),
     top,
     side,
     slot,
@@ -230,6 +217,11 @@ const ACTIONS = [
   'ModKeybind',
   'LauncherControl',
   'KeyboardKey',
+  'ToggleGameControls',
+  'MapAlphaCycle',
+  'TogglePointerMode',
+  'PerformanceDisplay',
+  'ShowKeyboard',
 ];
 const ACTION_LABELS = [
   '跳跃',
@@ -266,6 +258,11 @@ const ACTION_LABELS = [
   '模组按键',
   '扩展控件',
   '键盘按键',
+  '隐藏／显示游戏控制',
+  '循环地图透明度',
+  '切换触屏和鼠标',
+  '性能显示',
+  '弹出输入法',
 ];
 const clamp = (value: number, lower = 0, upper = 1) => Math.min(upper, Math.max(lower, value));
 const enumIndex = (value: number | string | undefined, names: readonly string[]) => {
@@ -310,13 +307,75 @@ const actionGlyphs = [
   '◉',
 ];
 
+// Match the centered sprite sizing used by DefaultControlTextures.TryDraw.
+function Artwork({
+  name,
+  textures,
+  size = 1,
+  x = 0,
+  y = 0,
+  opacity = 1,
+  fill = false,
+}: {
+  name?: string | null;
+  textures: ControlArtworkMap;
+  size?: number;
+  x?: number;
+  y?: number;
+  opacity?: number;
+  fill?: boolean;
+}) {
+  const image = name ? textures[name] : undefined;
+  return image ? (
+    <img
+      className="controls-art-layer"
+      src={image}
+      alt=""
+      style={{
+        left: `${(0.5 + x) * 100}%`,
+        top: `${(0.5 + y) * 100}%`,
+        width: `${size * 100}%`,
+        height: `${size * 100}%`,
+        opacity,
+        objectFit: fill ? 'fill' : 'contain',
+      }}
+    />
+  ) : null;
+}
+
+function InventorySlot({
+  textures,
+  selected = false,
+  icon,
+  material = 'Slot',
+}: {
+  textures: ControlArtworkMap;
+  selected?: boolean;
+  icon?: string;
+  material?: string;
+}) {
+  const frame = `MobileInventory/${selected ? 'SlotSelected' : material}`;
+  return (
+    <i data-textured={!!textures[frame]}>
+      <Artwork name={frame} textures={textures} fill opacity={selected ? 1 : 0.86} />
+      {icon && (
+        <Artwork name={`MobileInventory/${icon}`} textures={textures} size={0.68} opacity={0.3} />
+      )}
+    </i>
+  );
+}
+
 function InterfaceArtwork({
   id,
   hotbar,
+  textures,
+  opacity,
   showHotbarButtons = true,
 }: {
   id: string;
   hotbar: ReturnType<typeof hotbarGeometry>;
+  textures: ControlArtworkMap;
+  opacity: number;
   showHotbarButtons?: boolean;
 }) {
   if (id === 'Hotbar')
@@ -330,7 +389,7 @@ function InterfaceArtwork({
               height: `${(hotbar.side / hotbar.height) * 100}%`,
             }}
           >
-            ▤
+            <Artwork name="BackpackIcon" textures={textures} size={0.8} opacity={opacity} />
           </span>
         )}
         <div
@@ -347,7 +406,7 @@ function InterfaceArtwork({
           }}
         >
           {Array.from({ length: 10 }, (_, index) => (
-            <i key={index}>{index === 0 ? '◆' : ''}</i>
+            <InventorySlot key={index} textures={textures} selected={index === 0} />
           ))}
         </div>
         {showHotbarButtons && (
@@ -359,7 +418,7 @@ function InterfaceArtwork({
               height: `${(hotbar.side / hotbar.height) * 100}%`,
             }}
           >
-            ☰
+            <Artwork name="Settings" textures={textures} size={0.8} opacity={opacity} />
           </span>
         )}
       </div>
@@ -368,7 +427,7 @@ function InterfaceArtwork({
     return (
       <div className="controls-art-slots inventory">
         {Array.from({ length: 50 }, (_, index) => (
-          <i key={index}>{index === 0 ? '◆' : ''}</i>
+          <InventorySlot key={index} textures={textures} selected={index === 0} />
         ))}
       </div>
     );
@@ -376,7 +435,11 @@ function InterfaceArtwork({
     return (
       <div className="controls-art-slots coin-ammo">
         {Array.from({ length: 8 }, (_, index) => (
-          <i key={index}>{index % 4 === 0 ? ['●', '◆'][Math.floor(index / 4)] : ''}</i>
+          <InventorySlot
+            key={index}
+            textures={textures}
+            icon={index < 4 ? 'EmptyCoin' : 'EmptyAmmo'}
+          />
         ))}
       </div>
     );
@@ -384,7 +447,23 @@ function InterfaceArtwork({
     return (
       <div className="controls-art-equipment">
         {Array.from({ length: 16 }, (_, index) => (
-          <i key={index}>{index % 3 === 0 ? ['♙', '◇', '◈'][index % 3] : ''}</i>
+          <InventorySlot
+            key={index}
+            textures={textures}
+            material={index % 3 === 0 ? 'SlotGreen' : index % 3 === 1 ? 'SlotTeal' : 'SlotPurple'}
+            icon={
+              [
+                'EmptyHead',
+                'EmptyBody',
+                'EmptyLegs',
+                'EmptyAccessory',
+                'EmptyDye',
+                'EmptyGrapple',
+                'EmptyMount',
+                'EmptyPet',
+              ][index % 8]
+            }
+          />
         ))}
       </div>
     );
@@ -393,25 +472,31 @@ function InterfaceArtwork({
       <div className="controls-art-crafting">
         <div className="controls-art-categories">
           {Array.from({ length: 6 }, (_, index) => (
-            <i key={index}>{['⌂', '◆', '◈', '✦', '⚒', '…'][index]}</i>
+            <InventorySlot
+              key={index}
+              textures={textures}
+              icon={`Category${[0, 2, 4, 5, 8, 9][index]}`}
+            />
           ))}
         </div>
         <div className="controls-art-slots recipes">
           {Array.from({ length: 15 }, (_, index) => (
-            <i key={index}>{index % 5 === 0 ? '◆' : ''}</i>
+            <InventorySlot key={index} textures={textures} />
           ))}
         </div>
-        <span className="controls-art-craft-button">⚒</span>
+        <span className="controls-art-craft-button">
+          <Artwork name="MobileInventory/Craft" textures={textures} />
+        </span>
       </div>
     );
   if (id === 'InventoryActions')
     return (
       <div className="controls-art-actions">
-        <span>↩</span>
-        <span>⇧</span>
-        <span>⇄</span>
-        <span>⌕</span>
-        <span>⚙</span>
+        {['QuickStack', 'Sort', 'Restock', 'CraftLock', 'Settings'].map((name) => (
+          <span key={name}>
+            <Artwork name={`MobileInventory/${name}`} textures={textures} size={0.82} />
+          </span>
+        ))}
       </div>
     );
   if (id === 'CalamityDifficulty') return <div className="controls-art-difficulty">☠</div>;
@@ -422,52 +507,274 @@ function ControlArtwork({
   control,
   mode,
   data,
+  textures,
+  builtIn,
+  jumpHint,
 }: {
   control: Control;
   mode: string;
   data?: ControlData;
+  textures: ControlArtworkMap;
+  builtIn: boolean;
+  jumpHint: boolean;
 }) {
-  if (isStick(control))
+  if (control.CustomTexture?.startsWith('data:image/png;base64,')) {
+    return (
+      <img className="controls-art-texture" src={control.CustomTexture} alt="" draggable={false} />
+    );
+  }
+  // Imported launcher controls deliberately keep their own shapes and paints.
+  if (data) {
+    if (data.type === 'joystick') {
+      return (
+        <>
+          <span
+            className="controls-art-ral-pad"
+            style={{ opacity: Number(data.opacity ?? 0.35) * 0.8 }}
+          />
+          <span
+            className="controls-art-ral-knob"
+            style={{
+              width: `${Number(data.stickKnobSize ?? 0.4) * 100}%`,
+              height: `${Number(data.stickKnobSize ?? 0.4) * 100}%`,
+              opacity: Number(data.stickOpacity ?? 0.7),
+            }}
+          />
+        </>
+      );
+    }
     return (
       <>
-        <span className="controls-art-stick-ring" />
-        <span className="controls-art-stick-knob">
-          {control.JoystickRole === 0 || control.JoystickRole === 'Move' ? '✥' : '⌖'}
+        <Artwork name={data.nativeTexture as string | undefined} textures={textures} />
+        {data.type === 'button' && <span className="controls-art-launcher-label">{data.name}</span>}
+        {data.type === 'radialmenu' && !data.nativeTexture && <Icon name="sun" />}
+      </>
+    );
+  }
+  const buttonAction = ACTIONS[enumIndex(control.Action, ACTIONS)];
+  const toolbarGlyph: Record<string, string> = { PerformanceDisplay: '▂▄▆', TogglePointerMode: '▣', ShowKeyboard: '⌨' };
+  if (!isStick(control) && toolbarGlyph[buttonAction]) {
+    return (
+      <>
+        <Artwork name="PhoneTealCircle" textures={textures} />
+        <span className="controls-art-pointer-mode" aria-hidden="true">
+          {toolbarGlyph[buttonAction]}
         </span>
       </>
     );
-  if (data?.type === 'dpad')
+  }
+  const role = enumIndex(control.JoystickRole, STICK_ROLES);
+  if (textures.JoystickPad && isStick(control) && role !== 2) {
+    const defaultKnob = role === 0 ? 'JoystickKnob' : 'AttackAimUse';
+    const selectedKnob = control.TextureName;
+    const knob =
+      selectedKnob &&
+      selectedKnob !== defaultKnob &&
+      !(role === 1 && selectedKnob === 'AttackAimOnly')
+        ? selectedKnob
+        : role === 0
+          ? 'JoystickKnob'
+          : role === 1
+            ? 'AttackAimOnly'
+            : 'ItemButtonFrame';
     return (
-      <span className="controls-art-dpad">
-        <i>↑</i>
-        <i>←</i>
-        <i>●</i>
-        <i>→</i>
-        <i>↓</i>
-      </span>
+      <>
+        <Artwork name="JoystickPad" textures={textures} />
+        <Artwork name={knob} textures={textures} size={0.5} />
+        {role === 0 && jumpHint && (
+          <Artwork
+            name="MoveJumpHint"
+            textures={textures}
+            y={-0.38}
+            size={25 / (132 * control.Size)}
+          />
+        )}
+      </>
     );
-  if (data?.type === 'radialmenu' || control.Kind === 2 || control.Kind === 'RadialMenu')
+  }
+  if (textures.PhoneTealCircle && (!isStick(control) || role === 2)) {
+    const action =
+      role === 2 && isStick(control)
+        ? 1
+        : control.Kind === 2 || control.Kind === 'RadialMenu'
+          ? 21
+          : enumIndex(control.Action, ACTIONS);
+    // Keep these rules aligned with MobileControlArtwork and MobileHudArtwork.
+    const defaults = [
+      'Jump',
+      'GrappleHook',
+      'Heal',
+      'Mana',
+      'Buff',
+      'Mount',
+      'SmartCursor',
+      'SmartCursor',
+      'AimUseMode',
+      'TargetLockOn',
+      'ItemButtonFrame',
+      'ItemButtonFrame',
+      'BackpackIcon',
+      'Map',
+      'MapStyle',
+      'Settings',
+      'ChatBubble',
+      'ZoomIn',
+      'ZoomOut',
+      'QuickPotions',
+      'ZoomPair',
+      'DirectionalArrowsOriginal',
+      'ItemButtonFrame',
+      'ItemButtonFrame',
+      'SmartCursor',
+      'Mount',
+      'SmartCursor',
+      'BackpackIcon',
+      'BackpackIcon',
+      'BackpackIcon',
+      'BackpackIcon',
+    ];
+    const selected = control.TextureName;
+    if (selected && selected !== defaults[action] && textures[selected])
+      return <Artwork name={selected} textures={textures} />;
+    if ([13, 14, 16].includes(action)) {
+      const glyph = action === 16 ? 'HudChat' : action === 14 ? 'HudMinimapSelected' : 'HudMap';
+      return (
+        <>
+          <span
+            className="controls-art-toolbar"
+            style={{ borderImageSource: `url("${textures.HudToolbar}")` }}
+          />
+          <Artwork name={glyph} textures={textures} size={0.72} opacity={0.95} />
+        </>
+      );
+    }
+    if (action === 19)
+      return (
+        <>
+          <Artwork name="PhoneTealCircle" textures={textures} />
+          <Artwork name="Items/Item_28" textures={textures} size={20 / 64} y={-0.25} />
+          <Artwork name="Items/Item_110" textures={textures} size={20 / 64} x={0.25} />
+          <Artwork name="Items/Item_2349" textures={textures} size={20 / 64} y={0.25} />
+        </>
+      );
+    const background = [0, 7, 8, 9].includes(action)
+      ? 'PhoneTealCircle'
+      : [1, 5, 25].includes(action)
+        ? 'PhoneGreenCircle'
+        : [2, 3, 4, 6, 10, 11, 21, 22, 23].includes(action)
+          ? 'PhonePurpleCircle'
+          : null;
+    const glyphs = [
+      'PhoneJumpGlyph',
+      'PhoneEmptyGrappleGlyph',
+      'Items/Item_28',
+      'Items/Item_110',
+      'Items/Item_2349',
+      'PhoneMountGlyph',
+      'PhoneSmartInteractGlyph',
+      'PhoneSmartCursorOnGlyph',
+      'PhoneAimModeGlyph',
+      'PhoneTargetGlyph',
+      'PhoneInteractGlyph',
+      'PhoneUseGlyph',
+    ];
+    const glyph =
+      glyphs[action] ??
+      (action === 22
+        ? 'PhoneUnboundGlyph'
+        : action === 23
+          ? 'PhoneSwapGlyph'
+          : action === 21
+            ? 'PhoneRadialGlyph'
+            : defaults[action]);
+    return (
+      <>
+        <Artwork name={background} textures={textures} />
+        <Artwork
+          name={glyph}
+          textures={textures}
+          size={background ? 0.675 : builtIn && [12, 15].includes(action) ? 0.8 : 1}
+        />
+      </>
+    );
+  }
+  if (isStick(control)) {
+    const aim = enumIndex(control.JoystickRole, ['Move', 'Aim', 'Grapple', 'Unbound']) === 1;
+    const pad = textures.JoystickPad;
+    const knob = textures[aim ? 'AttackAimUse' : 'JoystickKnob'];
+    return (
+      <>
+        <span className="controls-art-stick-ring">
+          {pad && <img className="controls-art-texture" src={pad} alt="" />}
+        </span>
+        <span className={`controls-art-stick-knob${knob ? ' has-texture' : ''}`}>
+          {knob ? <img className="controls-art-texture" src={knob} alt="" /> : aim ? '⌖' : '✥'}
+        </span>
+      </>
+    );
+  }
+  if (control.Kind === 2 || control.Kind === 'RadialMenu')
     return (
       <span className="controls-art-radial">
-        <i>↑</i>
-        <i>→</i>
-        <i>↓</i>
-        <i>←</i>
+        {textures.PhoneRadialGlyph ? (
+          <img className="controls-art-texture" src={textures.PhoneRadialGlyph} alt="" />
+        ) : (
+          <>
+            <i>↑</i>
+            <i>→</i>
+            <i>↓</i>
+            <i>←</i>
+          </>
+        )}
       </span>
     );
   const action = enumIndex(control.Action, ACTIONS);
-  const symbol =
-    data?.type === 'text'
-      ? String(data.displayText ?? data.name ?? 'Text')
-      : data?.type === 'mousewheel'
-        ? '↕'
-        : data?.type === 'touchpad'
-          ? '⌖'
-          : data?.type === 'button'
-            ? (data.name ?? 'A').slice(0, 2)
-            : mode === 'Advanced' && action === 20
-              ? '⌕'
-              : (actionGlyphs[action] ?? '●');
+  const textureNames = [
+    'PhoneJumpGlyph',
+    'PhoneEmptyGrappleGlyph',
+    'Heal',
+    'Mana',
+    'Buff',
+    'PhoneMountGlyph',
+    'PhoneSmartInteractGlyph',
+    'PhoneSmartCursorGlyph',
+    'PhoneAimModeGlyph',
+    'PhoneTargetGlyph',
+    'PhoneInteractGlyph',
+    'PhoneUseGlyph',
+    'PhoneInventoryGlyph',
+    'Map',
+    'MapStyle',
+    'PhoneMenuGlyph',
+    'Chat',
+    'PhoneZoomInGlyph',
+    'PhoneZoomOutGlyph',
+    'QuickPotions',
+    'ZoomPair',
+    'PhoneRadialGlyph',
+    'PhoneUnboundGlyph',
+    'PhoneSwapGlyph',
+    'PhoneUseProfileGlyph',
+    'PhoneMountGlyph',
+    'PhoneAutoSelectGlyph',
+    'PhoneLoadoutGlyph',
+    'PhoneLoadoutGlyph',
+    'PhoneLoadoutGlyph',
+    'PhoneLoadoutGlyph',
+    null,
+    null,
+    null,
+  ];
+  const texture = control.TextureName || textureNames[action];
+  if (texture && textures[texture])
+    return (
+      <img
+        className="controls-art-texture controls-art-action-texture"
+        src={textures[texture]}
+        alt=""
+      />
+    );
+  const symbol = mode === 'Advanced' && action === 20 ? '⌕' : (actionGlyphs[action] ?? '●');
   return <span className="controls-art-button">{symbol}</span>;
 }
 
@@ -482,9 +789,9 @@ function defaultControls(
   const scale = gameControlScale(profile, viewport);
   const edge = (profile.EdgePadding ?? 18) * scale * 0.5;
   const stickY = height - 104 * scale - edge;
-  const left = Math.max(width * 0.203125, 166 * scale + edge) + (profile.LeftStickOffsetX ?? 0);
+  const left = Math.max(width * 0.19, 166 * scale + edge) + (profile.LeftStickOffsetX ?? 0);
   const right =
-    width - Math.max(width * 0.15, 166 * scale + edge) + (profile.RightStickOffsetX ?? 0);
+    width - Math.max(width * 0.145, 166 * scale + edge) + (profile.RightStickOffsetX ?? 0);
   const leftY = stickY + (profile.LeftStickOffsetY ?? 0);
   const rightY = stickY + (profile.RightStickOffsetY ?? 0);
   const button = (action: number, x: number, y: number, size = 1): Control => ({
@@ -540,19 +847,19 @@ function defaultControls(
       near(17, 'right', -176, 80, 16 / 24),
     );
   }
-  if (profile.ShowTopButtons !== false) {
-    const size = Math.trunc(40 * scale);
-    [16, 14, 13].forEach((action, index) =>
-      controls.push(
-        button(
-          action,
-          width - hotbar.inset - size * (3 - index) + Math.floor(size / 2),
-          hotbar.top + Math.floor(size / 2),
-          size / (48 * scale),
-        ),
+  const size = Math.trunc(40 * scale);
+  const toolbarActions = [ACTIONS.indexOf('PerformanceDisplay'), 16, 14, 13];
+  toolbarActions.forEach((action, index) => {
+    if (index > 0 && profile.ShowTopButtons === false) return;
+    controls.push(
+      button(
+        action,
+        width - hotbar.inset - size * (4 - index) + Math.floor(size / 2),
+        hotbar.top + Math.floor(size / 2),
+        size / (48 * scale),
       ),
     );
-  }
+  });
   return controls;
 }
 
@@ -586,8 +893,6 @@ const KEY_BINDINGS: [string, string][] = [
   ['MOUSE_LEFT', '鼠标左键'],
   ['MOUSE_RIGHT', '鼠标右键'],
   ['MOUSE_MIDDLE', '鼠标中键'],
-  ['MOUSE_WHEEL_UP', '向上滚动'],
-  ['MOUSE_WHEEL_DOWN', '向下滚动'],
   ...KEYBOARD_KEYS.map((key): [string, string] => ['KEYBOARD_' + key, key]),
 ];
 
@@ -613,7 +918,10 @@ function controlBounds(entry: Control, profile: Profile, customMode: boolean, vi
   return { x, y, width, height };
 }
 
-export function ControlsEditor({ onClose }: { onClose: () => void }) {
+export function ControlsEditor({ controlTextures, onClose }: {
+  controlTextures: ControlArtworkMap;
+  onClose: () => void;
+}) {
   const { t } = useTranslation();
   const { notify } = useLauncher();
   const [category, setCategory] = useState<Category>('controls');
@@ -623,6 +931,7 @@ export function ControlsEditor({ onClose }: { onClose: () => void }) {
   const [selected, setSelected] = useState('');
   const [scene, setScene] = useState<PreviewScene>('world');
   const [viewport, setViewport] = useState<Viewport>();
+  const [showToolbar, setShowToolbar] = useState(true);
   const [grid, setGrid] = useState(true);
   const [snap, setSnap] = useState(true);
   const [zoom, setZoom] = useState(100);
@@ -630,20 +939,32 @@ export function ControlsEditor({ onClose }: { onClose: () => void }) {
   const [panel, setPanel] = useState<'menu' | 'palette' | 'inspector' | 'selection'>();
   const [selectionPanelRight, setSelectionPanelRight] = useState(false);
   const [dock, setDock] = useState({ x: 1, y: 0.5 });
+  const menuPosition = useFloatingPosition();
+  const palettePosition = useFloatingPosition();
+  const inspectorPosition = useFloatingPosition();
+  const toolbarPosition = useFloatingPosition();
   const [confirmExit, setConfirmExit] = useState(false);
   const saved = useRef<Profile | undefined>(undefined);
   const history = useRef<{ past: Profile[]; future: Profile[] }>({ past: [], future: [] });
   const dialog = useRef<HTMLDialogElement>(null);
   const preview = useRef<HTMLDivElement>(null);
-  const drag = useRef<CanvasGesture | null>(null);
-  const suppressControlClick = useRef(false);
-  const dockDrag = useRef<{ id: number; x: number; y: number; moved: boolean }>(null);
-  const suppressDockClick = useRef(false);
+  const dockDrag = useRef<{
+    id: number;
+    startX: number;
+    startY: number;
+    width: number;
+    height: number;
+    moved: boolean;
+  } | null>(null);
   const requestClose = () => {
     if (pending) return;
     if (profile && layoutKeys.some((key) => saved.current?.[key] !== profile[key]))
       setConfirmExit(true);
     else onClose();
+  };
+  const toggleMenu = () => {
+    if (!profile) requestClose();
+    else setPanel(panel === 'menu' ? undefined : 'menu');
   };
   const changeCategory = (next: Category) => {
     if (next === category) return;
@@ -695,12 +1016,10 @@ export function ControlsEditor({ onClose }: { onClose: () => void }) {
   }, []);
 
   const controlEditor = category === 'controls';
-  const edit = (changes: Partial<Profile>, checkpoint = true) => {
+  const edit = (changes: Partial<Profile>) => {
     if (!profile) return;
-    if (checkpoint) {
-      history.current.past = [...history.current.past.slice(-39), profile];
-      history.current.future = [];
-    }
+    history.current.past = [...history.current.past.slice(-39), profile];
+    history.current.future = [];
     setProfile({ ...profile, ...changes });
   };
   const traverse = (forward: boolean) => {
@@ -710,6 +1029,7 @@ export function ControlsEditor({ onClose }: { onClose: () => void }) {
     if (!next) return;
     (forward ? past : future).push(profile);
     setProfile(next);
+    if (panel === 'selection') setPanel(undefined);
   };
 
   const save = async () => {
@@ -735,97 +1055,16 @@ export function ControlsEditor({ onClose }: { onClose: () => void }) {
     }
   };
 
-  const dragProps = (
-    id: string,
-    x: number,
-    y: number,
-    move: (x: number, y: number, checkpoint: boolean) => void,
-    size: { width: number; height: number },
-    resize: (width: number, height: number, checkpoint: boolean) => void,
-  ) => {
-    const position = (event: PointerEvent<HTMLButtonElement>) => {
-      const bounds = preview.current?.getBoundingClientRect();
-      return (
-        bounds && {
-          x: (event.clientX - bounds.left) / bounds.width,
-          y: (event.clientY - bounds.top) / bounds.height,
-        }
-      );
-    };
-    return {
-      onClick: (event: MouseEvent<HTMLButtonElement>) => {
-        if (event.detail && suppressControlClick.current) return;
-        const control = event.currentTarget.getBoundingClientRect();
-        const screen = dialog.current?.getBoundingClientRect();
-        setSelectionPanelRight(
-          !!screen && control.left + control.width / 2 < screen.left + screen.width / 2,
-        );
-        setSelected(id);
-        setPanel('selection');
-      },
-      onPointerDown: (event: PointerEvent<HTMLButtonElement>) => {
-        if (event.button !== 0 || drag.current || pending) return;
-        const point = position(event);
-        if (!point) return;
-        const resizing =
-          event.target instanceof Element && !!event.target.closest('.controls-resize-handle');
-        suppressControlClick.current = resizing;
-        drag.current = {
-          id,
-          pointer: event.pointerId,
-          mode: resizing ? 'resize' : 'move',
-          offsetX: resizing ? point.x : point.x - x,
-          offsetY: resizing ? point.y : point.y - y,
-          startWidth: size.width,
-          startHeight: size.height,
-          clientX: event.clientX,
-          clientY: event.clientY,
-          moved: false,
-        };
-        event.currentTarget.setPointerCapture(event.pointerId);
-        setSelected(id);
-      },
-      onPointerMove: (event: PointerEvent<HTMLButtonElement>) => {
-        const active = drag.current;
-        const point = position(event);
-        if (!point || active?.id !== id || active.pointer !== event.pointerId) return;
-        if (
-          !active.moved &&
-          Math.hypot(event.clientX - active.clientX, event.clientY - active.clientY) < 4
-        )
-          return;
-        suppressControlClick.current = true;
-        if (active.mode === 'resize') {
-          const dx = point.x - active.offsetX;
-          const dy = point.y - active.offsetY;
-          const checkpoint = !active.moved;
-          active.moved = true;
-          resize(
-            Math.max(0.012, active.startWidth + dx),
-            Math.max(0.018, active.startHeight + dy),
-            checkpoint,
-          );
-          return;
-        }
-        const rawX = clamp(point.x - active.offsetX);
-        const rawY = clamp(point.y - active.offsetY);
-        const snapValue = (value: number) => {
-          if (!snap) return value;
-          const nearest = Math.round(value * 10) / 10;
-          return Math.abs(value - nearest) <= 0.015 ? nearest : value;
-        };
-        const nextX = snapValue(rawX);
-        const nextY = snapValue(rawY);
-        if (Math.abs(nextX - x) < 0.00001 && Math.abs(nextY - y) < 0.00001) return;
-        const checkpoint = !active.moved;
-        active.moved = true;
-        move(nextX, nextY, checkpoint);
-      },
-      onLostPointerCapture: (event: PointerEvent<HTMLButtonElement>) => {
-        if (drag.current?.pointer === event.pointerId) drag.current = null;
-      },
-    };
+  const clearSelection = () => {
+    setSelected('');
+    setPanel(undefined);
   };
+  const dragProps = useLayoutGesture(preview, snap, setSelected, (id, node) => {
+    const bounds = node.getBoundingClientRect();
+    setSelectionPanelRight(bounds.left + bounds.width / 2 < window.innerWidth / 2);
+    setSelected(id);
+    setPanel('selection');
+  });
 
   const renderEditor = (profile: Profile, viewport: Viewport) => {
     const mode = enumIndex(profile.ControlLayout ?? defaultControlMode, [
@@ -871,30 +1110,24 @@ export function ControlsEditor({ onClose }: { onClose: () => void }) {
       );
     const control = controls.find((entry) => entry.Id === selected);
     const selectionOnly = panel === 'selection';
-    const editRegion = (id: string, position?: Position, checkpoint = true) => {
+    const editRegion = (id: string, position?: Position) => {
       const next = { ...positions };
       if (position) next[id] = position;
       else delete next[id];
-      edit({ InterfaceLayout: { FormatVersion: 1, Regions: next } }, checkpoint);
+      edit({ InterfaceLayout: { FormatVersion: 1, Regions: next } });
     };
-    const editPreset = (next: Control[] | null, checkpoint = true, name = preset?.Name) => {
+    const editPreset = (next: Control[] | null, name = preset?.Name) => {
       const presets = Array.from(
         { length: 4 },
         (_, index) => profile.CustomPresets?.[index] ?? null,
       );
       presets[presetIndex] = next
-        ? { Name: name ?? `预设 ${presetIndex + 1}`, Controls: next }
+        ? { Name: name ?? t('预设 {number}', { number: presetIndex + 1 }), Controls: next }
         : null;
-      edit(
-        { CustomPresets: presets, ActiveCustomPresetIndex: presetIndex, ControlLayout: 2 },
-        checkpoint,
-      );
+      edit({ CustomPresets: presets, ActiveCustomPresetIndex: presetIndex, ControlLayout: 2 });
     };
-    const editControl = (id: string, changes: Partial<Control>, checkpoint = true) =>
-      editPreset(
-        controls.map((entry) => (entry.Id === id ? { ...entry, ...changes } : entry)),
-        checkpoint,
-      );
+    const editControl = (id: string, changes: Partial<Control>) =>
+      editPreset(controls.map((entry) => (entry.Id === id ? { ...entry, ...changes } : entry)));
     const newControl = (kind: number, data?: ControlData) => {
       const Id = globalThis.crypto.randomUUID();
       editPreset([
@@ -907,7 +1140,7 @@ export function ControlsEditor({ onClose }: { onClose: () => void }) {
           X: 0.5,
           Y: 0.5,
           Size: 1,
-          ...(data && { Launcher: { Data: data, Assets: {} } }),
+          ...(data && { Launcher: { Data: data } }),
         },
       ]);
       setSelected(Id);
@@ -941,22 +1174,12 @@ export function ControlsEditor({ onClose }: { onClose: () => void }) {
     };
     const renderRegionArt = (entry: (typeof regions)[number], interactive: boolean) => {
       const current = locateRegion(entry);
-      const move = (x: number, y: number, checkpoint: boolean) =>
-        editRegion(entry.id, { ...current, CenterX: x, CenterY: y }, checkpoint);
-      const resize = (width: number, height: number, checkpoint: boolean) => {
-        const ratio = Math.max(
-          width / (entry.width * current.Scale),
-          height / (entry.height * current.Scale),
-        );
-        const Scale = clamp(current.Scale * ratio, 0.5, maxScale(entry));
-        editRegion(entry.id, { ...current, Scale }, checkpoint);
-      };
       return interactive ? (
         <button
           key={entry.id}
           type="button"
           aria-label={t(entry.label)}
-          aria-pressed={!previewOnly && entry.id === region.id}
+          aria-pressed={!previewOnly && entry.id === selected}
           disabled={previewOnly || pending}
           className={`controls-preview-node controls-preview-region controls-region-${entry.id}`}
           style={{
@@ -965,16 +1188,39 @@ export function ControlsEditor({ onClose }: { onClose: () => void }) {
             width: `${entry.width * current.Scale * 100}%`,
             height: `${entry.height * current.Scale * 100}%`,
           }}
-          {...dragProps(
-            entry.id,
-            current.CenterX,
-            current.CenterY,
-            move,
-            { width: entry.width * current.Scale, height: entry.height * current.Scale },
-            resize,
-          )}
+          {...dragProps({
+            id: entry.id,
+            box: {
+              x: current.CenterX,
+              y: current.CenterY,
+              width: entry.width * current.Scale,
+              height: entry.height * current.Scale,
+            },
+            insetX: entry.insetX,
+            insetY: entry.insetY,
+            fitSize: (w, h) => {
+              const scale = clamp(
+                Math.max(w / entry.width, h / entry.height),
+                0.5,
+                maxScale(entry),
+              );
+              return { width: entry.width * scale, height: entry.height * scale };
+            },
+            commit: (box) =>
+              editRegion(entry.id, {
+                CenterX: box.x,
+                CenterY: box.y,
+                Scale: box.width / entry.width,
+              }),
+          })}
         >
-          <InterfaceArtwork id={entry.id} hotbar={hotbar} />
+          <InterfaceArtwork
+            id={entry.id}
+            hotbar={hotbar}
+            textures={controlTextures}
+            opacity={profile.Opacity ?? 0.78}
+            showHotbarButtons={!customControls}
+          />
           <span className="controls-region-label">{t(entry.label)}</span>
           <span className="controls-resize-handle" aria-hidden="true" />
         </button>
@@ -990,7 +1236,13 @@ export function ControlsEditor({ onClose }: { onClose: () => void }) {
             height: `${entry.height * current.Scale * 100}%`,
           }}
         >
-          <InterfaceArtwork id={entry.id} hotbar={hotbar} showHotbarButtons={!!customControls} />
+          <InterfaceArtwork
+            id={entry.id}
+            hotbar={hotbar}
+            textures={controlTextures}
+            opacity={profile.Opacity ?? 0.78}
+            showHotbarButtons={false}
+          />
         </div>
       );
     };
@@ -1001,6 +1253,7 @@ export function ControlsEditor({ onClose }: { onClose: () => void }) {
         data-preview-only={previewOnly}
         data-dock-left={dock.x < 0.5}
         data-dock-top={dock.y < 0.5}
+        data-toolbar={showToolbar && !previewOnly}
       >
         <div className="controls-canvas-scroll">
           <div className="controls-canvas-scale" style={{ width: `${zoom}%`, height: `${zoom}%` }}>
@@ -1016,8 +1269,17 @@ export function ControlsEditor({ onClose }: { onClose: () => void }) {
                       ? t('制作界面预览')
                       : t('背包界面预览')
               }
+              onClick={(event) => {
+                if (
+                  event.target === event.currentTarget &&
+                  !previewOnly &&
+                  !event.currentTarget.closest('[data-manipulating="true"]')
+                )
+                  clearSelection();
+              }}
               data-grid={grid && !previewOnly}
               data-scene={scene}
+              data-native-artwork={!!controlTextures.JoystickPad}
             >
               {controlEditor && sceneRegions.map((entry) => renderRegionArt(entry, false))}
               {controlEditor
@@ -1029,7 +1291,6 @@ export function ControlsEditor({ onClose }: { onClose: () => void }) {
                       viewport,
                     );
                     const data = entry.Launcher?.Data;
-                    const image = data && texturePreview(data, entry.Launcher?.Assets);
                     const label = controlLabel(entry, t);
                     const circle =
                       !data ||
@@ -1047,7 +1308,7 @@ export function ControlsEditor({ onClose }: { onClose: () => void }) {
                         type="button"
                         aria-label={label}
                         aria-pressed={!previewOnly && entry.Id === selected}
-                        disabled={previewOnly || pending}
+                        disabled={pending}
                         className={`controls-preview-node controls-preview-control${isStick(entry) ? ' is-stick' : ''}`}
                         data-control-type={data?.type ?? (isStick(entry) ? 'joystick' : 'button')}
                         data-native-control={!data}
@@ -1056,87 +1317,111 @@ export function ControlsEditor({ onClose }: { onClose: () => void }) {
                           top: `${y * 100}%`,
                           width: `${width * 100}%`,
                           height: `${height * 100}%`,
-                          opacity: data?.isVisible === false ? 0.28 : (profile.Opacity ?? 0.78),
+                          opacity:
+                            data?.isVisible === false
+                              ? 0.28
+                              : !data && [13, 14, 16].includes(enumIndex(entry.Action, ACTIONS))
+                                ? 1
+                                : (profile.Opacity ?? 0.78),
                           rotate: data ? `${Number(data.rotation ?? 0)}deg` : undefined,
                           borderRadius: circle ? '50%' : Number(data?.cornerRadius ?? 4),
-                          ...(data && {
-                            background: `color-mix(in srgb, ${color(data.bgColor, 0xff2a2a2a)} ${Number(data.opacity ?? 0.35) * 100}%, transparent)`,
-                            borderColor: `color-mix(in srgb, ${color(data.strokeColor, 0xffaaaaaa)} ${Number(data.borderOpacity ?? 0.5) * 100}%, transparent)`,
+                          ...(data?.type === 'button' ? {
+                            background: 'transparent',
+                            border: 0,
                             color: `color-mix(in srgb, ${color(data.textColor, 0xffffffff)} ${Number(data.textOpacity ?? 0.9) * 100}%, transparent)`,
-                          }),
-                          ...(image && {
-                            backgroundImage: `url("${image}")`,
-                            backgroundSize: 'contain',
-                            backgroundPosition: 'center',
-                            backgroundRepeat: 'no-repeat',
-                          }),
+                          } : entry.CustomTexture
+                            ? { background: 'transparent', borderColor: 'transparent' }
+                            : data && {
+                                background: `color-mix(in srgb, ${color(data.bgColor, 0xff2a2a2a)} ${Number(data.opacity ?? 0.35) * 100}%, transparent)`,
+                                borderColor: `color-mix(in srgb, ${color(data.strokeColor, 0xffaaaaaa)} ${Number(data.borderOpacity ?? 0.5) * 100}%, transparent)`,
+                                color: `color-mix(in srgb, ${color(data.textColor, 0xffffffff)} ${Number(data.textOpacity ?? 0.9) * 100}%, transparent)`,
+                              }),
                         }}
-                        {...dragProps(
-                          entry.Id,
-                          x,
-                          y,
-                          (nextX, nextY, checkpoint) => {
-                            editControl(
-                              entry.Id,
-                              {
-                                X: clamp(
-                                  nextX - (data ? width / 2 : 0),
-                                  0,
-                                  data ? Math.max(0, 1 - width) : 1,
-                                ),
-                                Y: clamp(
-                                  nextY - (data ? height / 2 : 0),
-                                  0,
-                                  data ? Math.max(0, 1 - height) : 1,
-                                ),
-                              },
-                              checkpoint,
-                            );
-                          },
-                          { width, height },
-                          (nextWidth, nextHeight, checkpoint) => {
+                        {...(previewOnly ? {
+                          onPointerDown: (event) => event.currentTarget.setPointerCapture(event.pointerId),
+                        } : dragProps({
+                          id: entry.Id,
+                          box: { x, y, width, height },
+                          rotation: Number(data?.rotation ?? 0),
+                          fitSize: (w, h) => {
+                            const ratio = Math.max(w / width, h / height);
                             if (data) {
-                              const factor = Math.max(nextWidth / width, nextHeight / height);
-                              const widthValue =
-                                data.isSizeRatioLocked === false
-                                  ? (nextWidth * viewport.width) / (entry.Size * viewport.height)
-                                  : (data.width ?? 0.16) * factor;
-                              const heightValue =
-                                data.isSizeRatioLocked === false
-                                  ? nextHeight / entry.Size
-                                  : (data.height ?? 0.16) * factor;
-                              editControl(
-                                entry.Id,
-                                {
-                                  Launcher: {
-                                    ...entry.Launcher,
-                                    Data: {
-                                      ...data,
-                                      width: clamp(widthValue, 0.005, 3),
-                                      height: clamp(heightValue, 0.005, 3),
-                                    },
-                                  },
-                                },
-                                checkpoint,
-                              );
-                            } else {
-                              const factor = Math.max(nextWidth / width, nextHeight / height);
-                              editControl(
-                                entry.Id,
-                                { Size: clamp(entry.Size * factor, 0.35, 2) },
-                                checkpoint,
-                              );
+                              const baseWidth = (entry.Size * viewport.height) / viewport.width;
+                              return {
+                                width:
+                                  baseWidth *
+                                  clamp(
+                                    (data.isSizeRatioLocked === false ? w : width * ratio) /
+                                      baseWidth,
+                                    0.005,
+                                    3,
+                                  ),
+                                height:
+                                  entry.Size *
+                                  clamp(
+                                    (data.isSizeRatioLocked === false ? h : height * ratio) /
+                                      entry.Size,
+                                    0.005,
+                                    3,
+                                  ),
+                              };
                             }
+                            const min =
+                              !isStick(entry) && enumIndex(entry.Action, ACTIONS) === 12 ? 1 : 0.35;
+                            const base = controlBounds(
+                              { ...entry, Size: 1 },
+                              profile,
+                              true,
+                              viewport,
+                            );
+                            const size = clamp(Math.max(w / base.width, h / base.height), min, 2);
+                            return { width: base.width * size, height: base.height * size };
                           },
-                        )}
+                          commit: (box, resized) => {
+                            const position = {
+                              X: clamp(box.x - (data ? box.width / 2 : 0)),
+                              Y: clamp(box.y - (data ? box.height / 2 : 0)),
+                            };
+                            if (!resized) return editControl(entry.Id, position);
+                            if (!data) {
+                              const base = controlBounds(
+                                { ...entry, Size: 1 },
+                                profile,
+                                true,
+                                viewport,
+                              );
+                              return editControl(entry.Id, {
+                                ...position,
+                                Size: box.width / base.width,
+                              });
+                            }
+                            editControl(entry.Id, {
+                              ...position,
+                              Launcher: {
+                                ...entry.Launcher,
+                                Data: {
+                                  ...data,
+                                  width:
+                                    (box.width * viewport.width) / (entry.Size * viewport.height),
+                                  height: box.height / entry.Size,
+                                },
+                              },
+                            });
+                          },
+                        }))}
                       >
-                        {!image && (
-                          <ControlArtwork
-                            control={entry}
-                            mode={builtInMode === 1 ? 'Advanced' : 'Simple'}
-                            data={data}
-                          />
+                        {data?.type === 'button' && !entry.CustomTexture && (
+                          <ButtonSurface data={data} width={width * viewport.width} height={height * viewport.height} />
                         )}
+                        <ControlArtwork
+                          control={entry}
+                          mode={builtInMode === 1 ? 'Advanced' : 'Simple'}
+                          data={data}
+                          textures={controlTextures}
+                          builtIn={!customControls}
+                          jumpHint={profile.JoystickUpJumps !== false}
+                        />
+                        {data?.type === 'radialmenu' && <RadialPreview data={data} />}
                         <span className="controls-resize-handle" aria-hidden="true" />
                       </button>
                     );
@@ -1146,21 +1431,28 @@ export function ControlsEditor({ onClose }: { onClose: () => void }) {
           </div>
         </div>
         {panel === 'palette' && !previewOnly && (
-          <section className="controls-float-panel" aria-label={t('控件组件')}>
-            <Button onClick={() => setPanel('menu')}>{t('返回菜单')}</Button>
-            <div className="controls-editor-actions">
-              <Button onClick={() => newControl(0)}>{t('游戏摇杆')}</Button>
-              <Button onClick={() => newControl(1)}>{t('游戏按键')}</Button>
+          <section className="controls-float-panel controls-palette" style={palettePosition.style} aria-label={t('控件组件')}>
+            <div className="controls-inspector-header" {...palettePosition.handle}>
+              <h3>{t('添加控件')}</h3>
+              <Button aria-label={t('关闭')} symbol="close" onClick={() => setPanel(undefined)} />
+            </div>
+            <div className="controls-palette-grid">
+              <Button symbol="game" onClick={() => newControl(0)}>
+                {t('游戏摇杆')}
+              </Button>
               {componentTypes.map(([type, label], kind) => (
                 <Button
                   key={type}
+                  symbol={type === 'joystick' ? 'game' : type === 'radialmenu' ? 'sun' : 'plus'}
                   onClick={() =>
                     newControl(kind, {
                       type,
-                      name: label,
-                      width: 0.16,
-                      height: 0.16,
-                      ...(type === 'text' && { displayText: label }),
+                      name: t(type === 'button' ? '跳跃' : label),
+                      width: type === 'button' ? 0.12 : 0.16,
+                      height: type === 'button' ? 0.12 : 0.16,
+                      ...(type === 'button' && {
+                        shape: 'RECTANGLE', cornerRadius: 8, opacity: 0.8, keycode: 'ACTION_Jump',
+                      }),
                     })
                   }
                 >
@@ -1174,12 +1466,13 @@ export function ControlsEditor({ onClose }: { onClose: () => void }) {
           <aside
             key={selectionOnly ? selected : 'inspector'}
             className="controls-float-panel controls-inspector"
+            style={inspectorPosition.style}
             data-selection-side={
               selectionOnly ? (selectionPanelRight ? 'right' : 'left') : undefined
             }
             aria-label={t('属性')}
           >
-            <div className="controls-inspector-header">
+            <div className="controls-inspector-header" {...inspectorPosition.handle}>
               <h3>
                 {controlEditor
                   ? control
@@ -1194,69 +1487,65 @@ export function ControlsEditor({ onClose }: { onClose: () => void }) {
                 onClick={() => setPanel(undefined)}
               />
             </div>
-            <fieldset disabled={pending}>
+            <fieldset disabled={pending} inert={pending}>
               {controlEditor ? (
                 <>
                   {!selectionOnly && (
                     <>
-                      <label className="controls-field">
-                        {t('布局模式')}
-                        <select
-                          value={mode}
-                          onChange={(event) => edit({ ControlLayout: Number(event.target.value) })}
-                        >
-                          <option value={0}>{t('简单')}</option>
-                          <option value={1}>{t('高级')}</option>
-                          <option value={2}>{t('自定义')}</option>
-                        </select>
-                      </label>
-                      <label className="controls-field">
-                        {t('控制预设')}
-                        <select
-                          value={mode === 2 ? presetIndex : ''}
-                          onChange={(event) => {
-                            setSelected('');
-                            edit({
-                              ActiveCustomPresetIndex: Number(event.target.value),
-                              ControlLayout: 2,
-                            });
-                          }}
-                        >
-                          <option value="" disabled>
-                            {t('选择预设')}
-                          </option>
-                          {[0, 1, 2, 3].map((index) => (
-                            <option key={index} value={index}>
-                              {profile.CustomPresets?.[index]?.Name ||
-                                t('预设 {number}', { number: index + 1 })}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+                      <LabeledSelect
+                        className="controls-field"
+                        label={t('布局模式')}
+                        value={String(mode)}
+                        onChange={(value) => edit({ ControlLayout: Number(value) })}
+                        options={[
+                          ['0', t('简单')],
+                          ['1', t('高级')],
+                          ['2', t('自定义')],
+                        ]}
+                      />
+                      <LabeledSelect
+                        className="controls-field"
+                        label={t('控制预设')}
+                        value={mode === 2 ? String(presetIndex) : ''}
+                        onChange={(value) => {
+                          setSelected('');
+                          edit({
+                            ActiveCustomPresetIndex: Number(value),
+                            ControlLayout: 2,
+                          });
+                        }}
+                        options={[
+                          ['', t('选择预设'), true],
+                          ...[0, 1, 2, 3].map(
+                            (index) =>
+                              [
+                                String(index),
+                                profile.CustomPresets?.[index]?.Name ||
+                                  t('预设 {number}', { number: index + 1 }),
+                              ] as const,
+                          ),
+                        ]}
+                      />
                       {mode === 2 && (
                         <label className="controls-field">
                           {t('预设名称')}
                           <input
                             value={preset?.Name ?? t('预设 {number}', { number: presetIndex + 1 })}
                             maxLength={64}
-                            onChange={(event) => editPreset(controls, true, event.target.value)}
+                            onChange={(event) => editPreset(controls, event.target.value)}
                           />
                         </label>
                       )}
-                      <label className="controls-field">
-                        {t('选中控件')}
-                        <select
-                          value={control?.Id ?? ''}
-                          onChange={(event) => setSelected(event.target.value)}
-                        >
-                          <option value="">{t('选择控件')}</option>
-                          {controls.map((entry) => (
-                            <option key={entry.Id} value={entry.Id}>
-                              {controlLabel(entry, t)}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+                      <LabeledSelect
+                        className="controls-field"
+                        label={t('选中控件')}
+                        value={control?.Id ?? ''}
+                        onChange={setSelected}
+                        options={[
+                          ['', t('选择控件')],
+                          ...controls.map((entry) => [entry.Id, controlLabel(entry, t)] as const),
+                        ]}
+                      />
                     </>
                   )}
                   {control && (
@@ -1275,6 +1564,18 @@ export function ControlsEditor({ onClose }: { onClose: () => void }) {
                           {t('删除控件')}
                         </Button>
                       </div>
+                      {controlData && (
+                        <ControlBindings
+                          key={`bindings-${control.Id}`}
+                          data={controlData}
+                          actions={KEY_BINDINGS}
+                          edit={(changes) =>
+                            editControl(control.Id, {
+                              Launcher: { Data: { ...controlData, ...changes } },
+                            })
+                          }
+                        />
+                      )}
                       <Range
                         label="单个控件大小"
                         value={control.Size}
@@ -1282,6 +1583,11 @@ export function ControlsEditor({ onClose }: { onClose: () => void }) {
                         max={2}
                         step={0.05}
                         onChange={(Size) => editControl(control.Id, { Size })}
+                      />
+                      <ControlTexturePicker
+                        key={'texture-' + control.Id}
+                        value={control.CustomTexture}
+                        onChange={(CustomTexture) => editControl(control.Id, { CustomTexture })}
                       />
                       <Range
                         label="控件横向位置"
@@ -1299,102 +1605,70 @@ export function ControlsEditor({ onClose }: { onClose: () => void }) {
                         step={0.01}
                         onChange={(Y) => editControl(control.Id, { Y })}
                       />
-                      <label className="controls-check">
-                        <input
-                          type="checkbox"
-                          checked={control.Multitouch ?? true}
-                          onChange={(event) =>
-                            editControl(control.Id, { Multitouch: event.target.checked })
-                          }
-                        />
+                      <label className="controls-toggle">
                         {t('允许多点触控')}
+                        <Switch
+                          label={t('允许多点触控')}
+                          checked={control.Multitouch ?? true}
+                          onChange={(Multitouch) => editControl(control.Id, { Multitouch })}
+                        />
                       </label>
-                      {controlData && (
-                        <ExtendedControlFields
-                          key={control.Id}
-                          data={controlData}
-                          assets={control.Launcher?.Assets}
-                          actions={KEY_BINDINGS}
-                          edit={(changes, assets = control.Launcher?.Assets) =>
+                      {!controlData && isStick(control) && (
+                        <LabeledSelect
+                          className="controls-field"
+                          label={t('摇杆用途')}
+                          value={String(enumIndex(control.JoystickRole, STICK_ROLES))}
+                          onChange={(value) =>
                             editControl(control.Id, {
-                              Launcher: { Assets: assets, Data: { ...controlData, ...changes } },
+                              JoystickRole: Number(value),
+                              TextureName: '',
                             })
                           }
+                          options={STICK_LABELS.map((label, index) => [String(index), t(label)])}
                         />
-                      )}
-                      {!controlData && isStick(control) && (
-                        <label className="controls-field">
-                          {t('摇杆用途')}
-                          <select
-                            value={enumIndex(control.JoystickRole, STICK_ROLES)}
-                            onChange={(event) =>
-                              editControl(control.Id, {
-                                JoystickRole: Number(event.target.value),
-                                TextureName: '',
-                              })
-                            }
-                          >
-                            {STICK_LABELS.map((label, index) => (
-                              <option key={label} value={index}>
-                                {t(label)}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
                       )}
                       {!controlData &&
                         !isStick(control) &&
                         (control.Kind === 2 || control.Kind === 'RadialMenu' ? (
                           Array.from({ length: 4 }, (_, slot) => (
-                            <label className="controls-field" key={slot}>
-                              {t('轮盘动作 {number}', { number: slot + 1 })}
-                              <select
-                                value={enumIndex(control.RadialActions?.[slot] ?? 22, ACTIONS)}
-                                onChange={(event) =>
-                                  editControl(control.Id, {
-                                    RadialActions: Array.from({ length: 4 }, (_, i) =>
-                                      i === slot
-                                        ? Number(event.target.value)
-                                        : (control.RadialActions?.[i] ?? 22),
-                                    ),
-                                  })
-                                }
-                              >
-                                {ACTION_LABELS.map((label, index) => (
-                                  <option
-                                    key={label}
-                                    value={index}
-                                    disabled={[19, 20, 21, 32].includes(index)}
-                                  >
-                                    {t(label)}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                          ))
-                        ) : (
-                          <label className="controls-field">
-                            {t('按键动作')}
-                            <select
-                              value={enumIndex(control.Action ?? 22, ACTIONS)}
-                              onChange={(event) =>
+                            <LabeledSelect
+                              key={slot}
+                              className="controls-field"
+                              label={t('轮盘动作 {number}', { number: slot + 1 })}
+                              value={String(
+                                enumIndex(control.RadialActions?.[slot] ?? 22, ACTIONS),
+                              )}
+                              onChange={(value) =>
                                 editControl(control.Id, {
-                                  Action: Number(event.target.value),
-                                  TextureName: '',
+                                  RadialActions: Array.from({ length: 4 }, (_, i) =>
+                                    i === slot ? Number(value) : (control.RadialActions?.[i] ?? 22),
+                                  ),
                                 })
                               }
-                            >
-                              {ACTION_LABELS.map((label, index) => (
-                                <option
-                                  key={label}
-                                  value={index}
-                                  disabled={[21, 32].includes(index)}
-                                >
-                                  {t(label)}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
+                              options={ACTION_LABELS.map((label, index) => [
+                                String(index),
+                                t(label),
+                                [19, 20, 21, 32].includes(index),
+                              ])}
+                            />
+                          ))
+                        ) : (
+                          <LabeledSelect
+                            className="controls-field"
+                            label={t('按键动作')}
+                            value={String(enumIndex(control.Action ?? 22, ACTIONS))}
+                            onChange={(value) =>
+                              editControl(control.Id, {
+                                Action: Number(value),
+                                TextureName: '',
+                              })
+                            }
+                            options={ACTION_LABELS.map((label, index) => [
+                              String(index),
+                              t(label),
+                              [21, 32].includes(index),
+                            ])}
+                          />
                         ))}
                       {!controlData && enumIndex(control.Action, ACTIONS) === 31 && (
                         <label className="controls-field">
@@ -1480,35 +1754,28 @@ export function ControlsEditor({ onClose }: { onClose: () => void }) {
                 </>
               ) : (
                 <>
-                  <label className="controls-field">
-                    {t('界面区域')}
-                    <select
-                      value={region.id}
-                      onChange={(event) => {
-                        const id = event.target.value;
-                        setSelected(id);
-                        if (id === 'Hotbar') setScene('hotbar');
-                        else if (id === 'Crafting') setScene('crafting');
-                        else if (id === 'Equipment' || scene === 'hotbar') setScene('inventory');
-                      }}
-                    >
-                      {regions.map((entry) => (
-                        <option key={entry.id} value={entry.id}>
-                          {t(entry.label)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="controls-field">
-                    {t('快捷栏方向')}
-                    <select
-                      value={enumIndex(profile.HotbarOrientation, ['Vertical', 'Horizontal'])}
-                      onChange={(event) => edit({ HotbarOrientation: Number(event.target.value) })}
-                    >
-                      <option value={0}>{t('纵向')}</option>
-                      <option value={1}>{t('横向')}</option>
-                    </select>
-                  </label>
+                  <LabeledSelect
+                    className="controls-field"
+                    label={t('界面区域')}
+                    value={region.id}
+                    onChange={(id) => {
+                      setSelected(id);
+                      if (id === 'Hotbar') setScene('hotbar');
+                      else if (id === 'Crafting') setScene('crafting');
+                      else if (id === 'Equipment' || scene === 'hotbar') setScene('inventory');
+                    }}
+                    options={regions.map((entry) => [entry.id, t(entry.label)])}
+                  />
+                  <LabeledSelect
+                    className="controls-field"
+                    label={t('快捷栏方向')}
+                    value={String(enumIndex(profile.HotbarOrientation, ['Vertical', 'Horizontal']))}
+                    onChange={(value) => edit({ HotbarOrientation: Number(value) })}
+                    options={[
+                      ['0', t('纵向')],
+                      ['1', t('横向')],
+                    ]}
+                  />
                   <Range
                     label="区域大小"
                     value={regionPosition.Scale}
@@ -1570,7 +1837,11 @@ export function ControlsEditor({ onClose }: { onClose: () => void }) {
           </aside>
         )}
         {panel === 'menu' && (
-          <section className="controls-float-panel" aria-label={t('编辑菜单')}>
+          <section className="controls-float-panel" style={menuPosition.style} aria-label={t('编辑菜单')}>
+            <div className="controls-inspector-header" {...menuPosition.handle}>
+              <h3>{t('编辑菜单')}</h3>
+              <Button aria-label={t('关闭')} symbol="close" onClick={() => setPanel(undefined)} />
+            </div>
             <div className="controls-menu-group" role="group" aria-label={t('编辑模式')}>
               <Button aria-pressed={controlEditor} onClick={() => changeCategory('controls')}>
                 {t('游戏控制')}
@@ -1580,6 +1851,7 @@ export function ControlsEditor({ onClose }: { onClose: () => void }) {
               </Button>
             </div>
             <div className="controls-menu-group" role="group" aria-label={t('预览场景')}>
+              <h4>{t('预览场景')}</h4>
               {(
                 [
                   ['world', '游戏'],
@@ -1597,17 +1869,30 @@ export function ControlsEditor({ onClose }: { onClose: () => void }) {
               )}
             </div>
             <div className="controls-menu-group" role="group" aria-label={t('编辑工具')}>
-              {controlEditor && (
-                <Button
-                  disabled={pending || previewOnly || controls.length >= 256}
-                  onClick={() => setPanel('palette')}
-                >
-                  {t('添加控件')}
-                </Button>
-              )}
-              <Button disabled={previewOnly} onClick={() => setPanel('inspector')}>
-                {t('属性')}
+              <h4>{t('编辑工具')}</h4>
+              <Button
+                aria-pressed={showToolbar}
+                disabled={previewOnly}
+                onClick={() => setShowToolbar(!showToolbar)}
+              >
+                {t('工具栏')}
               </Button>
+              {!showToolbar && !previewOnly && (
+                <>
+                  {controlEditor && (
+                    <Button
+                      disabled={pending || controls.length >= 256}
+                      onClick={() => setPanel('palette')}
+                    >
+                      {t('添加控件')}
+                    </Button>
+                  )}
+                  <Button onClick={() => setPanel('inspector')}>{t('属性')}</Button>
+                  <Button variant="primary" disabled={pending} onClick={() => void save()}>
+                    {t('保存布局')}
+                  </Button>
+                </>
+              )}
               <Button aria-pressed={grid} disabled={previewOnly} onClick={() => setGrid(!grid)}>
                 {t('网格')}
               </Button>
@@ -1637,21 +1922,6 @@ export function ControlsEditor({ onClose }: { onClose: () => void }) {
                 disabled={zoom === 200}
                 onClick={() => setZoom(zoom + 25)}
               />
-              <Button
-                aria-label={t('撤销')}
-                title={t('撤销')}
-                symbol="reset"
-                disabled={pending || !history.current.past.length || previewOnly}
-                onClick={() => traverse(false)}
-              />
-              <Button
-                aria-label={t('重做')}
-                title={t('重做')}
-                disabled={pending || !history.current.future.length || previewOnly}
-                onClick={() => traverse(true)}
-              >
-                <Icon name="reset" className="controls-redo-icon" />
-              </Button>
             </div>
             <div className="controls-menu-group">
               {controlEditor && (
@@ -1676,11 +1946,60 @@ export function ControlsEditor({ onClose }: { onClose: () => void }) {
               <Button disabled={pending} onClick={requestClose}>
                 {t('退出编辑')}
               </Button>
-              <Button variant="primary" disabled={pending} onClick={() => void save()}>
-                {t('保存布局')}
-              </Button>
             </div>
           </section>
+        )}
+        {showToolbar && !previewOnly && (
+          <div className="controls-quickbar" role="group" style={toolbarPosition.style} aria-label={t('编辑工具')}>
+            <span className="controls-toolbar-grip" title={t('拖动工具栏')} {...toolbarPosition.handle} />
+            {controlEditor && (
+              <Button
+                symbol="plus"
+                aria-label={t('添加控件')}
+                title={t('添加控件')}
+                aria-expanded={panel === 'palette'}
+                disabled={pending || controls.length >= 256}
+                onClick={() => setPanel(panel === 'palette' ? undefined : 'palette')}
+              />
+            )}
+            <Button
+              symbol="sliders"
+              aria-label={t('属性')}
+              title={t('属性')}
+              aria-expanded={panel === 'inspector' || selectionOnly}
+              onClick={() =>
+                setPanel(panel === 'inspector' || selectionOnly ? undefined : 'inspector')
+              }
+            />
+            {selected && (
+              <Button
+                symbol="close"
+                aria-label={t('清空选择')}
+                title={t('清空选择')}
+                onClick={clearSelection}
+              />
+            )}
+            <span className="controls-tool-separator" />
+            <Button
+              symbol="reset"
+              aria-label={t('撤销')}
+              title={t('撤销')}
+              disabled={pending || !history.current.past.length}
+              onClick={() => traverse(false)}
+            />
+            <Button
+              aria-label={t('重做')}
+              title={t('重做')}
+              disabled={pending || !history.current.future.length}
+              onClick={() => traverse(true)}
+            >
+              <Icon name="reset" className="controls-redo-icon" />
+            </Button>
+            <span className="controls-tool-separator" />
+            <Button variant="primary" symbol="check" disabled={pending} onClick={() => void save()}>
+              {t('保存布局')}
+            </Button>
+          </div>
         )}
       </div>
     );
@@ -1707,42 +2026,61 @@ export function ControlsEditor({ onClose }: { onClose: () => void }) {
           type="button"
           className="controls-dock"
           aria-label={t('悬浮菜单')}
-          aria-expanded={!!panel}
+          aria-expanded={panel === 'menu'}
           style={{ left: `${dock.x * 100}%`, top: `${dock.y * 100}%` }}
           onPointerDown={(event) => {
-            if (event.button !== 0 || dockDrag.current) return;
-            const bounds = event.currentTarget.getBoundingClientRect();
+            const track = event.currentTarget.parentElement?.getBoundingClientRect();
+            if (
+              event.button !== 0 ||
+              !event.isPrimary ||
+              dockDrag.current ||
+              !track?.width ||
+              !track.height
+            )
+              return;
             dockDrag.current = {
               id: event.pointerId,
-              x: event.clientX - bounds.left - bounds.width / 2,
-              y: event.clientY - bounds.top - bounds.height / 2,
+              startX: event.clientX,
+              startY: event.clientY,
+              width: track.width,
+              height: track.height,
               moved: false,
             };
-            suppressDockClick.current = false;
             event.currentTarget.setPointerCapture(event.pointerId);
           }}
           onPointerMove={(event) => {
             const active = dockDrag.current;
-            const track = event.currentTarget.parentElement?.getBoundingClientRect();
-            if (active?.id !== event.pointerId || !track?.width || !track.height) return;
-            const x = event.clientX - active.x - track.left;
-            const y = event.clientY - active.y - track.top;
-            if (
-              !active.moved &&
-              Math.hypot(x - dock.x * track.width, y - dock.y * track.height) < 6
-            )
-              return;
+            if (active?.id !== event.pointerId) return;
+            const dx = event.clientX - active.startX;
+            const dy = event.clientY - active.startY;
+            if (!active.moved && Math.hypot(dx, dy) < 4) return;
             active.moved = true;
-            setDock({ x: clamp(x / track.width), y: clamp(y / track.height) });
+            const x = clamp(dock.x + dx / active.width);
+            const y = clamp(dock.y + dy / active.height);
+            event.currentTarget.style.transform = `translate(${(x - dock.x) * active.width}px, ${(y - dock.y) * active.height}px)`;
           }}
-          onLostPointerCapture={() => {
-            suppressDockClick.current = dockDrag.current?.moved ?? false;
+          onPointerUp={(event) => {
+            const active = dockDrag.current;
+            if (active?.id !== event.pointerId) return;
+            const dx = event.clientX - active.startX;
+            const dy = event.clientY - active.startY;
+            if (active.moved || Math.hypot(dx, dy) >= 4)
+              setDock({
+                x: clamp(dock.x + dx / active.width),
+                y: clamp(dock.y + dy / active.height),
+              });
+            else toggleMenu();
+            event.currentTarget.style.removeProperty('transform');
+            dockDrag.current = null;
+            event.currentTarget.releasePointerCapture(event.pointerId);
+          }}
+          onLostPointerCapture={(event) => {
+            if (dockDrag.current?.id !== event.pointerId) return;
+            event.currentTarget.style.removeProperty('transform');
             dockDrag.current = null;
           }}
           onClick={(event) => {
-            if (event.detail && suppressDockClick.current) return;
-            if (!profile) requestClose();
-            else setPanel(panel ? undefined : 'menu');
+            if (!event.detail) toggleMenu();
           }}
         >
           <Icon name="home" />

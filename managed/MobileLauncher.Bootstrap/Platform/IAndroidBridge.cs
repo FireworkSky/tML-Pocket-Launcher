@@ -24,6 +24,8 @@ public interface IAndroidBridge
 
     void ShowToast(string message, bool longDuration = false);
 
+    void ReportFrameRate(int fps) { }
+
     void SetStartupStatus(string title, string detail, int progressPercent = -1)
     {
     }

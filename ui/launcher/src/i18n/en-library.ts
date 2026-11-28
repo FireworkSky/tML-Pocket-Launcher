@@ -1,13 +1,25 @@
 const english: Record<string, string> = {
   // Games and Terraria assets
   游戏资源分类: 'Game library tabs',
+  'Terraria 游戏管理': 'Manage Terraria',
+  '切换 Terraria 版本': 'Switch Terraria edition',
+  '切换 tModLoader 启动版本': 'Switch tModLoader launch version',
+  '安装 {source} 版 Terraria': 'Install Terraria from {source}',
+  '卸载 {source} 版 Terraria': 'Uninstall Terraria from {source}',
+  '删除此版本的游戏资源。存档和模组会保留。': 'Remove this edition’s game assets. Saves and mods are kept.',
+  '带 PE 纹理': 'Includes PE textures',
+  当前使用: 'In use',
+  重新安装: 'Reinstall',
+  安装游戏: 'Install',
+  使用此版本: 'Use this edition',
+  登录并下载: 'Sign in and download',
   已安装: 'Installed',
   'Terraria 资源状态': 'Terraria asset status',
   'Terraria 资源': 'Terraria assets',
   'Android 版': 'Android edition',
   'Android 版 · 离线可用': 'Android edition · Available offline',
-  'GOG · 离线可用': 'GOG · Available offline',
-  'Steam · 启动前验证所有权': 'Steam · Verifies ownership before launch',
+  'GOG · 内置触控纹理': 'GOG · Built-in touch artwork',
+  'Steam · 内置触控纹理，启动前验证所有权': 'Steam · Built-in touch artwork and ownership verification before launch',
   '尚未导入，前往「添加游戏」准备原版资源。': 'Open Add game to get the original game assets.',
   已校验: 'Verified',
   待准备: 'Setup needed',
@@ -22,8 +34,8 @@ const english: Record<string, string> = {
   安装本地预编译发行包: 'Install a local prebuilt release',
   '获取 Terraria 资源': 'Get Terraria assets',
   'Terraria 原版资源': 'Original Terraria assets',
-  '从已购游戏获取，或导入本地安装包。':
-    'Get assets from a game you own or import a local installer.',
+  'Steam 和 GOG 版可直接使用内置触控纹理。':
+    'Steam and GOG can use the built-in touch artwork.',
   'Steam 登录与下载': 'Sign in and download from Steam',
   '账户登录、所有权验证与下载': 'Sign in, verify ownership, and download',
   'GOG 登录与下载': 'Sign in and download from GOG',
@@ -58,6 +70,15 @@ const english: Record<string, string> = {
   取消: 'Cancel',
   'Terraria PE 资源已就绪。': 'Terraria PE assets are ready.',
   转换资源: 'Convert assets',
+  'Terraria PE · 启动前检查游戏是否已安装':
+    'Terraria PE · Checks that the game is installed before launch',
+  '正在检查 Terraria PE 是否已安装…': 'Checking whether Terraria PE is installed…',
+  '本机未检测到 Google Play 版 Terraria PE。':
+    'No Google Play edition of Terraria PE was found on this device.',
+  '请重新检测 Terraria PE 安装包。': 'Check the installed Terraria PE apps again.',
+  重新检测: 'Check again',
+  '前往 Google Play': 'Open Google Play',
+  '无法打开 Google Play。': 'Could not open Google Play.',
 
   // Home and patches
   '添加 Steam、GOG 或 Android 版资源': 'Add assets from Steam, GOG, or the Android edition',
@@ -111,8 +132,7 @@ const english: Record<string, string> = {
   必要适配: 'Required patches',
   '触摸、显示与平台兼容 · 随启动器维护':
     'Touch, display, and platform compatibility · Maintained with the launcher',
-  '更改在下次启动生效 · 联机托管仅支持已适配的版本':
-    'Changes take effect on the next launch. Multiplayer hosting requires a supported version.',
+  更改在下次启动生效: 'Changes take effect on the next launch.',
   资源与平台兼容: 'Asset and platform compatibility',
   '资源校验、离线创意工坊、日志与 Android 系统服务。复用启动器兼容层。':
     'Uses the launcher’s compatibility layer for asset verification, offline Workshop access, logging, and Android system services.',
@@ -122,9 +142,6 @@ const english: Record<string, string> = {
   全屏显示: 'Fullscreen display',
   '按实际 Surface 同步显示与全屏呈现，适配系统栏和窗口重建。':
     'Syncs fullscreen rendering with the Android Surface and handles system bars and window recreation.',
-  渲染比例: 'Render scale',
-  '按设置中的 50%、75% 或 100% 创建渲染缓冲区。':
-    'Creates a render buffer at the selected scale of 50%, 75%, or 100%.',
   控制台兼容: 'Console compatibility',
   '适配 Android 不支持的桌面控制台操作；日志由启动器管理。':
     'Adapts desktop console operations for Android. The launcher manages logs.',
@@ -132,10 +149,9 @@ const english: Record<string, string> = {
   '保持 60 Hz 游戏逻辑，提高前台绘制上限；不支持的时序会自动回退。':
     'Raises the rendering cap in the foreground while keeping game logic at 60 Hz, with automatic fallback when needed.',
   帧率显示: 'FPS display',
-  '在游戏内显示实际完成呈现的 FPS。': 'Shows the actual rendered frame rate in-game.',
   '手机联机托管 · 实验性': 'Mobile multiplayer hosting · Experimental',
-  '从游戏多人入口或 /mobilehost 创建房间；启用补丁不会自动启动服务器。':
-    'Host a room from the multiplayer menu or with /mobilehost. Start the server in-game after enabling the patch.',
+  '在适配版本中，可从游戏多人入口或使用 /mobilehost 创建房间。':
+    'On supported versions, host a room from the multiplayer menu or with /mobilehost.',
 
   // Installed mods and dependencies
   操作未完成: 'Operation failed',
@@ -155,8 +171,8 @@ const english: Record<string, string> = {
   全部启用: 'Enable all',
   全部停用: 'Disable all',
   还没有模组: 'No mods installed',
-  '使用右上角「添加模组」下载或导入 .tmod 文件。':
-    'Use Add mods in the upper-right corner to download mods or import .tmod files.',
+  '使用右上角「添加模组」下载或导入游戏模组。':
+    'Use Add mods in the upper-right corner to download or import mods.',
   没有匹配的模组: 'No matching mods',
   '试试其他关键词或清除筛选。': 'Try a different search or clear the filters.',
   清除筛选: 'Clear filters',
@@ -170,6 +186,8 @@ const english: Record<string, string> = {
   依赖: 'Dependencies',
   删除: 'Delete',
   模组分类: 'Mod categories',
+  按大小排序: 'Largest first',
+  汉化: 'Chinese translation',
   缺失: 'Missing',
   版本不足: 'Outdated',
   未启用: 'Disabled',
@@ -212,8 +230,8 @@ const english: Record<string, string> = {
     'Download an official release or import a local release ZIP. After installation, choose a launch version here.',
   '版本列表读取失败，请重试。': 'Could not load releases. Try again.',
   '安装 {version}': 'Install {version}',
-  '{size} MB · 官方发行包。独立安装并设为当前版本；同版本重新安装只替换该版本文件。保留模组与存档。':
-    '{size} MB · Official release. Installs separately and becomes the current version. Reinstalling replaces only this version’s files. Your mods and saves are kept.',
+  '{size}官方发行包。独立安装并设为当前版本；同版本重新安装只替换该版本文件。保留模组与存档。':
+    '{size}Official release. Installs separately and becomes the current version. Reinstalling replaces only this version’s files. Your mods and saves are kept.',
   'GitHub · 官方发行包': 'GitHub · Official release',
   下载并安装: 'Download and install',
   'tModLoader 发行版本': 'tModLoader releases',
@@ -231,11 +249,13 @@ const english: Record<string, string> = {
   发行较早优先: 'Oldest release first',
   版本号: 'Version number',
   版本来源: 'Release source',
+  按地区自动: 'Automatic by region',
+  '按地区自动（{source}）': 'Automatic ({source})',
   '筛选作用于已加载版本。不同版本独立安装，模组与存档共用。':
     'Filters apply to loaded releases. Versions install separately and share mods and saves.',
   管理已安装版本: 'Manage installed versions',
   重试: 'Retry',
-  '{size} MB · tModLoader 官方发行包': '{size} MB · Official tModLoader release',
+  '{size}tModLoader 官方发行包': '{size}Official tModLoader release',
   下载此版本: 'Download',
   没有匹配的版本: 'No matching versions',
   暂未找到发行版本: 'No releases found',
@@ -319,6 +339,52 @@ const english: Record<string, string> = {
   搜索与筛选: 'Search and filters',
   搜索名称: 'Search by name',
   重置筛选: 'Reset filters',
+  游戏实例: 'Game instances',
+  默认实例: 'Default instance',
+  当前实例: 'Active instance',
+  已归档: 'Archived',
+  切换实例: 'Switch instance',
+  归档实例: 'Archive instance',
+  取消归档: 'Unarchive',
+  实例名称: 'Instance name',
+  保存名称: 'Save name',
+  创建实例: 'Create instance',
+  '每个实例独立保存角色、世界、模组和启动设置，共用已安装的游戏资源。':
+    'Each instance has its own characters, worlds, mods, and launch settings. Installed game files are shared.',
+  '为当前实例选择启动版本。已安装的 tML 发行文件由各实例共用。':
+    'Choose the launch version for the active instance. Installed tML files are shared.',
+  '请输入 1–80 个字符的实例名称': 'Enter an instance name between 1 and 80 characters',
+  '最多创建 100 个实例': 'Up to 100 instances are supported',
+  存档备份: 'Save backups',
+  管理备份: 'Manage backups',
+  '备份或恢复当前实例中的角色和世界。':
+    'Back up or restore characters and worlds in this instance.',
+  启动前自动备份: 'Back up automatically before launch',
+  备份角色和世界: 'Back up characters and worlds',
+  导入备份: 'Import backup',
+  '导入存档备份 · ZIP': 'Import save backup · ZIP',
+  '导出存档备份 · ZIP': 'Export save backup · ZIP',
+  删除备份: 'Delete backup',
+  '确定删除这份备份？': 'Delete this backup?',
+  还没有存档备份: 'No save backups yet',
+  恢复存档: 'Restore saves',
+  确认恢复: 'Confirm restore',
+  '存档已恢复。': 'Saves restored.',
+  '存档备份已导入。': 'Backup imported.',
+  '存档备份已导出。': 'Backup exported.',
+  '恢复会替换当前角色和世界，并先备份当前存档。':
+    'Restoring replaces the current characters and worlds after backing them up.',
+  '正在备份角色和世界…': 'Backing up characters and worlds…',
+  等待下载: 'Queued',
+  '正在暂停…': 'Pausing…',
+  继续下载: 'Resume download',
+  '下载任务列表已满，请先完成或取消任务。':
+    'The download queue is full. Finish or cancel a task first.',
+  '查看进度，暂停或继续下载 tML 版本。': 'View progress, pause, or resume tML release downloads.',
+  '正在安装 tModLoader 发行包…': 'Installing the tModLoader release…',
+  '发行包正在安装，请等待完成': 'The release is being installed. Wait for it to finish.',
+  下载任务已结束: 'The download task has ended',
+  '下载已完成，退出游戏后自动安装': 'Download complete. Installation will start after you exit the game.',
 };
 
 export default english;

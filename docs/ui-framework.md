@@ -14,9 +14,8 @@ The active interaction prototype now lives in [`ui/launcher`](../ui/launcher/REA
 inside the project, with React 19, strict TypeScript, Vite and the official
 `@animate-ui/react` 2.4.5 package. This supersedes the earlier visualization-folder
 HTML/JavaScript renderer. Start with `npm ci` and `npm run dev` in that directory;
-the phone preview is `http://127.0.0.1:8769/preview.html`. `npm test` builds production
-assets and verifies them on a temporary port, rather than depending on the app's
-development server.
+the phone preview is `http://127.0.0.1:8769/preview.html`. `npm run build` checks
+TypeScript and generates production assets.
 
 The workspace fills the viewport and begins directly with its 48 px page header.
 Page titles use 13 px, medium weight and the muted text color. Preview disclosure and the example-data toggle live in page help and
@@ -200,7 +199,7 @@ Appearance: system/light/dark theme, motion preference, default plain background
 
 The browser prototype stores validated visual preferences under the versioned `tml-launcher-ui-v1` localStorage key: theme, motion, glass material, panel opacity, plain/soft background and four shortcuts. Corrupt, unknown-version or unavailable storage falls back to defaults. Local image contents, account information, sample installs and activity are excluded from persistence.
 
-Game and runtime: pre-launch validation, supported renderer choices, supported render scale and advanced launch arguments. Do not add controls whose changes cannot reach the runtime, such as a fictitious JVM/RAM slider for a CoreCLR game.
+Game and runtime: pre-launch validation, supported renderer choices, and advanced launch arguments. Do not add controls whose changes cannot reach the runtime, such as a fictitious JVM/RAM slider for a CoreCLR game.
 
 Input: virtual controls visibility, dedicated layout editor, opacity and system keyboard integration. Storage: paths, network preferences, tasks and scoped cache cleanup. Cache actions must explicitly preserve saves, mods and account sessions. About: build version, dependency notices, diagnostics and log export.
 

@@ -4,9 +4,8 @@
 
 - Kotlin packages follow their directory under `app.com.tmlpocket`. Keep feature code under `feature/<feature>` and shared runtime/platform adapters under `core`.
 - Kotlin classes use PascalCase, methods/properties use camelCase, enum constants and immutable compile-time constants use UPPER_SNAKE_CASE.
-- C# source, tests and build settings live under `managed/`; Android source sets live under `android/app/src/`. Managed projects and namespaces use `MobileLauncher.<Component>`. Use one main public class per file and file-scoped namespaces.
+- C# source and build settings live under `managed/`; Android source sets live under `android/app/src/`. Managed projects and namespaces use `MobileLauncher.<Component>`. Use one main public class per file and file-scoped namespaces.
 - Use names that describe behavior: `importPackage`, `loadReleases`, `prepareLauncher`. Avoid template names, numbered variants, generic helpers, and parallel implementations.
-- Tests mirror the production feature namespace. Archive fixture builders stay in test sources.
 
 ## Responsibilities
 
@@ -27,11 +26,11 @@ The isolated Web UI in `ui/launcher` uses strict TypeScript, React components an
 two-space Prettier formatting. Keep shared primitive adapters in `components`,
 page/workflow components in `features`, pure metadata rules in `domain` and
 session/persistence logic in `state`. Prefer specific Animate UI primitive imports
-and controlled state. Run `npm run check`, `npm run format:check` and `npm test`
-from that workspace for Web-only changes; these do not validate Android gameplay.
+and controlled state. Run `npm run check`, `npm run format:check` and `npm run build`
+from that workspace for Web-only changes.
 
 ## Review and verification
 
-Run `scripts/checks/verify.ps1` before submitting changes. It checks package/namespace paths, dependency boundaries, managed formatting, compilation and tests. Fix managed whitespace with `dotnet format whitespace MobileLauncher.slnx`. Changes to package installation/downloads require fixture-based JVM tests; changes to runtime hooks require managed tests. Run APK assembly and package inspection for build/layout changes. Native and gameplay behavior require an arm64 Android device and fresh logs.
+Run `scripts/checks/verify.ps1` before submitting changes. It checks package/namespace paths, dependency boundaries, managed formatting and compilation. Fix managed whitespace with `dotnet format whitespace MobileLauncher.slnx`. Run APK assembly and package inspection for build/layout changes. Native and gameplay behavior require an arm64 Android device and fresh logs.
 
 Keep structural refactors and behavior changes reviewable. Update references, manifest names, JNI symbols, scripts and documentation in the same change as a file move. Never commit credentials, machine paths, generated game assets, downloads, logs or APKs.

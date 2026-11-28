@@ -119,7 +119,7 @@ function Installed() {
           {['terraria', 'tml'].map((kind) => (
             <div className="resource-row" key={kind}>
               <span className="resource-icon">
-                {kind === 'tml' ? <img src="/tmodloader.png" alt="" /> : <Icon name="game" />}
+                <img src={kind === 'tml' ? '/tmodloader.png' : '/terraria.png'} alt="" />
               </span>
               <div className="resource-copy">
                 <h3>{kind === 'tml' ? 'tModLoader' : 'Terraria'}</h3>

@@ -7,29 +7,37 @@
 | 项目 | 要求 |
 | --- | --- |
 | 设备 | Android 9 / API 28 及以上，arm64-v8a |
-| Terraria PE | 设备上已安装由 505 Games 发行的正版 Terraria PE，包名为 `com.and.games505.TerrariaPaid`。启动器会检查基础 APK 和已安装的拆分 APK 是否包含受支持的 Unity 资源 |
-| 启动器 | 使用包含 Terraria PE 转换配置的 APK |
+| Terraria PE | 设备上已安装包名为 `com.and.games505.TerrariaPaid` 的 Terraria PE。启动器会检查包名及基础 APK／拆分 APK 的 Unity 资源结构 |
+| 启动器 | 默认 Android Studio 和命令行构建均包含转换器与配置 |
 | tModLoader | 选择转换配置指定的 tModLoader 版本。项目开发指南中的配置以 `2026.09.3.1` 为目标 |
 | 存储 | 转换前预留至少 2 GiB 可用空间。一次设备转换记录为 14,468 项资源约 704 MiB，实际占用随游戏版本和配置变化 |
 
 ## 转换与启动
 
-1. 安装 Terraria PE 和带转换配置的启动器 APK，等待内置 tModLoader 安装完成。
-2. 打开 **游戏 → 添加游戏 → 检测 Terraria PE**，查看识别出的游戏版本和 APK 数量。
+1. 安装 Terraria PE 和带转换配置的启动器 APK，点击「准备游戏」，选择 tModLoader `2026.09.3.1` 并下载安装。
+2. 打开 **游戏 → 添加游戏 → 检测 Terraria PE**，查看游戏版本、APK 数量和资源结构检查结果。
 3. 如果弹窗提示需要其他 tModLoader 版本，先安装并选中指定版本，再回到检测弹窗。
 4. 点击 **转换资源**。转换和校验完成后，启动器会选中转换后的资源并返回首页。
 5. 在首页点击 **启动游戏**。如需切回已有的 Steam 或 GOG 资源，在 **游戏 → 已安装** 中选择对应来源。
+
+## 安装包校验
+
+提取、转换前会检查包名和 Unity 资源结构，不再固定比对发行证书 SHA-256 指纹。转换期间仍会检查应用是否更新。转换记录包含来源包名，使用 PE 资源启动时会确认对应应用仍已安装。旧转换记录使用原有 Google Play 来源。
+
+包名和资源结构检查不能证明安装包来自 Google Play。账户购买授权验证仍需发行方提供相应商店接口或接入支持。资源格式兼容性由目标转换配置和实际转换结果确定。
 
 ## 常见问题
 
 | 提示或现象 | 如何处理 |
 | --- | --- |
-| 本机未检测到 Terraria PE | 确认 505 Games 发行的 Terraria PE 已安装在同一设备和 Android 用户空间 |
+| 本机未检测到 Terraria PE | 确认 Google Play 版已安装在同一设备和 Android 用户空间 |
+| 所选安装包已卸载 | 安装转换时使用的渠道版本后重新检测 |
+| 仅支持 Google Play 版，请重新检测并转换资源 | 使用 Google Play 原版重新转换，生成受支持来源的转换记录 |
 | 安装包缺少受支持的 Unity 资源容器 | 确认游戏安装完整。转换器按 APK 内实际资源结构检测兼容性 |
-| 此 APK 未包含 Terraria PE 转换配置 | 使用带转换配置的构建，或按开发指南使用 `-PmobileTerrariaProfile` 构建 |
+| 此 APK 未包含 Terraria PE 转换配置 | 更新启动器，或用当前代码在 Android Studio 重新构建安装；默认已打包配置，无需额外参数 |
 | 转换期间 Terraria PE 已更新 | 等游戏更新完成后，重新检测并转换 |
 | 默认触控控件缺少纹理 | 带转换配置的启动器会从本机 Terraria PE 获取触控纹理。使用 Steam 或 GOG 资源启动时也可以复用这些纹理。缺失的纹理会记入启动日志并跳过绘制 |
 
 转换走本机资源导入流程。桌面版 tModLoader 通过 SDL、FNA 和 Android CoreCLR 运行，存档、模组和配置使用启动器自己的 `userdata/` 目录。
 
-构建转换器、准备目标配置和运行设备测试的步骤见开发指南。[开发指南](development.md#runtime-validation)
+构建转换器、准备目标配置和设备验证步骤见开发指南。[开发指南](development.md#runtime-validation)

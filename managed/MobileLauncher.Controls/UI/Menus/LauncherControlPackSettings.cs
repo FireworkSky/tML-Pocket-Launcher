@@ -52,7 +52,7 @@ internal static class LauncherControlPackSettings
 						preview.Warnings.Add(control.Launcher.String("name") + ": " + MobileSettingsCatalog.Text("PackUnboundKey", key));
 				}
 			}
-			status = MobileSettingsCatalog.Text("PackSummary", preview.Preset.Controls.Count, preview.Images.Count, preview.Warnings.Count);
+			status = MobileSettingsCatalog.Text("PackSummary", preview.Preset.Controls.Count, preview.Warnings.Count);
 		}
 		Action("PackPreview", Preview, () => status);
 		Action("PackReport", () => {

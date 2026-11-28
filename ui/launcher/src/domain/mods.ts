@@ -180,7 +180,7 @@ export function parsePack(text: string): Omit<ModPack, 'id'> {
     !['stable', 'preview'].includes(String(value.profile)) ||
     !Array.isArray(value.mods) ||
     value.mods.length > 1000 ||
-    !value.mods.every((id) => typeof id === 'string' && /^[A-Za-z0-9_]+$/.test(id))
+    !value.mods.every((id) => typeof id === 'string' && /^[\p{L}\p{Nl}\p{Nd}_][\p{L}\p{Nl}\p{M}\p{Nd}\p{Pc}]*$/u.test(id))
   )
     throw new Error('不支持的清单格式');
   return {

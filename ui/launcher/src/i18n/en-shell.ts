@@ -32,9 +32,9 @@ const messages = {
   当前游戏与启动操作: 'Current game and launch actions',
   '导入 JSON': 'Import JSON',
   导入补丁: 'Import patch',
-  '导入和管理 .tmod 元信息、启用清单与模组包。创意工坊部分文件需要 Steam 客户端获取后导入。':
-    'Import .tmod files and manage metadata, enabled mods, and mod packs. Some Workshop items require the Steam client before import.',
-  导入模组: 'Import mod',
+  '导入游戏模组，查看模组信息，管理启用清单与模组包。创意工坊部分文件需要 Steam 客户端获取后导入。':
+    'Import mods and manage metadata, enabled mods, and mod packs. Some Workshop items require the Steam client before import.',
+  导入游戏模组: 'Import mods',
   导入资源: 'Import assets',
   返回启动器: 'Back to launcher',
   返回上一页: 'Go back',
@@ -86,8 +86,8 @@ const messages = {
   首次启动可能需要更长时间: 'The first launch may take longer',
   提示: 'Notices',
   添加: 'Add',
-  '添加 Terraria 资源和 tModLoader，检查运行环境后选择配置启动。支持导入 Steam ZIP 和 GOG Linux .sh；Steam 资源启动前需要登录并验证游戏所有权，GOG 导入无需登录。':
-    'Add Terraria assets and tModLoader, check the runtime, and select a launch profile. Steam ZIP and GOG Linux .sh imports are supported. Steam assets require sign-in and ownership verification before launch.',
+  '添加 Terraria 资源和 tModLoader，检查运行环境后选择配置启动。支持导入 Steam ZIP 和 GOG Linux .sh；Steam 下载完成后可离线启动，导入 Steam ZIP 需在启动时验证所有权。':
+    'Add Terraria assets and tModLoader, check the runtime, and select a launch profile. Steam ZIP and GOG Linux .sh imports are supported. Steam downloads can launch offline. Imported Steam ZIPs require ownership verification at launch.',
   添加模组: 'Add mods',
   未连接账户: 'No account connected',
   下载分类: 'Download categories',
@@ -119,7 +119,8 @@ const messages = {
   暂无任务记录: 'No tasks yet',
   暂无提示记录: 'No notices yet',
   诊断日志: 'Diagnostic logs',
-  正版资源来源: 'Game sources',
+  '管理 Terraria 资源': 'Manage Terraria assets',
+  添加游戏资源: 'Add game assets',
   '正在读取启动日志…': 'Reading launch logs…',
   '正在检查游戏资源…': 'Checking game assets…',
   '正在进入游戏…': 'Opening the game…',

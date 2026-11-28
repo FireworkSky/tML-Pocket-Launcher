@@ -1,23 +1,17 @@
 package org.libsdl.app;
 
 import android.app.Activity;
-import android.app.AlertDialog;
-import android.app.Dialog;
 import android.app.UiModeManager;
 import android.content.ActivityNotFoundException;
 import android.content.ClipboardManager;
 import android.content.ClipData;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
-import android.graphics.Color;
-import android.graphics.PorterDuff;
-import android.graphics.drawable.Drawable;
 import android.hardware.Sensor;
 import android.net.Uri;
 import android.os.Build;
@@ -28,9 +22,7 @@ import android.os.Message;
 import android.os.ParcelFileDescriptor;
 import android.util.DisplayMetrics;
 import android.util.Log;
-import android.util.SparseArray;
 import android.view.Display;
-import android.view.Gravity;
 import android.view.InputDevice;
 import android.view.KeyEvent;
 import android.view.PointerIcon;
@@ -42,11 +34,7 @@ import android.view.WindowManager;
 import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputMethodManager;
 import android.webkit.MimeTypeMap;
-import android.widget.Button;
-import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
-import android.widget.TextView;
-import android.widget.Toast;
 
 import java.io.FileNotFoundException;
 import java.util.ArrayList;
@@ -57,7 +45,7 @@ import java.util.Locale;
 /**
     SDL Activity
 */
-public class SDLActivity extends Activity implements View.OnSystemUiVisibilityChangeListener {
+public abstract class SDLActivity extends Activity implements View.OnSystemUiVisibilityChangeListener {
     private static final String TAG = "SDL";
     private static final int SDL_MAJOR_VERSION = 3;
     private static final int SDL_MINOR_VERSION = 2;
@@ -264,6 +252,11 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
         Log.v("SDL", "Finished main function");
     }
 
+    /** Requested stack size in bytes for the thread running main(), or zero for the platform default. */
+    protected long getMainThreadStackSize() {
+        return 0;
+    }
+
     /**
      * This method returns the name of the shared object with the application entry point
      * It can be overridden by derived classes.
@@ -405,24 +398,8 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
 
         if (mBrokenLibraries) {
             mSingleton = this;
-            AlertDialog.Builder dlgAlert  = new AlertDialog.Builder(this);
-            dlgAlert.setMessage("An error occurred while trying to start the application. Please try again and/or reinstall."
-                  + System.getProperty("line.separator")
-                  + System.getProperty("line.separator")
-                  + "Error: " + errorMsgBrokenLib);
-            dlgAlert.setTitle("SDL Error");
-            dlgAlert.setPositiveButton("Exit",
-                new DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(DialogInterface dialog,int id) {
-                        // if this button is clicked, close current activity
-                        SDLActivity.mSingleton.finish();
-                    }
-                });
-           dlgAlert.setCancelable(false);
-           dlgAlert.create().show();
-
-           return;
+            showLibraryLoadError(errorMsgBrokenLib);
+            return;
         }
 
 
@@ -854,7 +831,7 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
                     // Start up the C app thread and enable sensor input for the first time
                     // FIXME: Why aren't we enabling sensor input at start?
 
-                    mSDLThread = new Thread(new SDLMain(), "SDLThread");
+                    mSDLThread = new Thread(null, new SDLMain(), "SDLThread", mSingleton.getMainThreadStackSize());
                     mSurface.enableSensor(Sensor.TYPE_ACCELEROMETER, true);
                     mSDLThread.start();
 
@@ -1409,6 +1386,9 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
         return true;
     }
 
+    protected void onSoftKeyboardBack() {
+    }
+
     static class ShowTextInputTask implements Runnable {
         /*
          * This is used to regulate the pan&scan method to have some offset from
@@ -1459,9 +1439,29 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
             mTextEdit.requestFocus();
 
             InputMethodManager imm = (InputMethodManager) SDL.getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
-            imm.showSoftInput(mTextEdit, 0);
-
             mScreenKeyboardShown = true;
+            if (Build.VERSION.SDK_INT >= 30) {
+                imm.showSoftInput(mTextEdit, 0);
+            } else {
+                // Android 9 and 10 can reject a request before the newly focused editor is served.
+                final SDLActivity activity = mSingleton;
+                final View editor = mTextEdit;
+                editor.post(() -> {
+                    if (!canShowKeyboard(activity, editor)) return;
+                    if (!imm.showSoftInput(editor, 0)) {
+                        editor.postDelayed(() -> {
+                            if (canShowKeyboard(activity, editor)) {
+                                imm.showSoftInput(editor, 0);
+                            }
+                        }, 150);
+                    }
+                });
+            }
+        }
+
+        private boolean canShowKeyboard(SDLActivity activity, View editor) {
+            return mSingleton == activity && mTextEdit == editor && mScreenKeyboardShown
+                    && editor.isFocused() && editor.hasWindowFocus() && activity.shouldShowTextInput();
         }
     }
 
@@ -1588,204 +1588,13 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
 
     // Messagebox
 
-    /** Result of current messagebox. Also used for blocking the calling thread. */
-    protected final int[] messageboxSelection = new int[1];
+    protected abstract void showLibraryLoadError(String detail);
 
-    /**
-     * This method is called by SDL using JNI.
-     * Shows the messagebox from UI thread and block calling thread.
-     * buttonFlags, buttonIds and buttonTexts must have same length.
-     * @param buttonFlags array containing flags for every button.
-     * @param buttonIds array containing id for every button.
-     * @param buttonTexts array containing text for every button.
-     * @param colors null for default or array of length 5 containing colors.
-     * @return button id or -1.
-     */
-    public int messageboxShowMessageBox(
-            final int flags,
-            final String title,
-            final String message,
-            final int[] buttonFlags,
-            final int[] buttonIds,
-            final String[] buttonTexts,
-            final int[] colors) {
+    /** SDL invokes this method on the calling game thread and expects the selected button ID. */
+    public abstract int messageboxShowMessageBox(int flags, String title, String message,
+            int[] buttonFlags, int[] buttonIds, String[] buttonTexts, int[] colors);
 
-        messageboxSelection[0] = -1;
-
-        // sanity checks
-
-        if ((buttonFlags.length != buttonIds.length) && (buttonIds.length != buttonTexts.length)) {
-            return -1; // implementation broken
-        }
-
-        // collect arguments for Dialog
-
-        final Bundle args = new Bundle();
-        args.putInt("flags", flags);
-        args.putString("title", title);
-        args.putString("message", message);
-        args.putIntArray("buttonFlags", buttonFlags);
-        args.putIntArray("buttonIds", buttonIds);
-        args.putStringArray("buttonTexts", buttonTexts);
-        args.putIntArray("colors", colors);
-
-        // trigger Dialog creation on UI thread
-
-        runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                messageboxCreateAndShow(args);
-            }
-        });
-
-        // block the calling thread
-
-        synchronized (messageboxSelection) {
-            try {
-                messageboxSelection.wait();
-            } catch (InterruptedException ex) {
-                ex.printStackTrace();
-                return -1;
-            }
-        }
-
-        // return selected value
-
-        return messageboxSelection[0];
-    }
-
-    protected void messageboxCreateAndShow(Bundle args) {
-
-        // TODO set values from "flags" to messagebox dialog
-
-        // get colors
-
-        int[] colors = args.getIntArray("colors");
-        int backgroundColor;
-        int textColor;
-        int buttonBorderColor;
-        int buttonBackgroundColor;
-        int buttonSelectedColor;
-        if (colors != null) {
-            int i = -1;
-            backgroundColor = colors[++i];
-            textColor = colors[++i];
-            buttonBorderColor = colors[++i];
-            buttonBackgroundColor = colors[++i];
-            buttonSelectedColor = colors[++i];
-        } else {
-            backgroundColor = Color.TRANSPARENT;
-            textColor = Color.TRANSPARENT;
-            buttonBorderColor = Color.TRANSPARENT;
-            buttonBackgroundColor = Color.TRANSPARENT;
-            buttonSelectedColor = Color.TRANSPARENT;
-        }
-
-        // create dialog with title and a listener to wake up calling thread
-
-        final AlertDialog dialog = new AlertDialog.Builder(this).create();
-        dialog.setTitle(args.getString("title"));
-        dialog.setCancelable(false);
-        dialog.setOnDismissListener(new DialogInterface.OnDismissListener() {
-            @Override
-            public void onDismiss(DialogInterface unused) {
-                synchronized (messageboxSelection) {
-                    messageboxSelection.notify();
-                }
-            }
-        });
-
-        // create text
-
-        TextView message = new TextView(this);
-        message.setGravity(Gravity.CENTER);
-        message.setText(args.getString("message"));
-        if (textColor != Color.TRANSPARENT) {
-            message.setTextColor(textColor);
-        }
-
-        // create buttons
-
-        int[] buttonFlags = args.getIntArray("buttonFlags");
-        int[] buttonIds = args.getIntArray("buttonIds");
-        String[] buttonTexts = args.getStringArray("buttonTexts");
-
-        final SparseArray<Button> mapping = new SparseArray<Button>();
-
-        LinearLayout buttons = new LinearLayout(this);
-        buttons.setOrientation(LinearLayout.HORIZONTAL);
-        buttons.setGravity(Gravity.CENTER);
-        for (int i = 0; i < buttonTexts.length; ++i) {
-            Button button = new Button(this);
-            final int id = buttonIds[i];
-            button.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    messageboxSelection[0] = id;
-                    dialog.dismiss();
-                }
-            });
-            if (buttonFlags[i] != 0) {
-                // see SDL_messagebox.h
-                if ((buttonFlags[i] & 0x00000001) != 0) {
-                    mapping.put(KeyEvent.KEYCODE_ENTER, button);
-                }
-                if ((buttonFlags[i] & 0x00000002) != 0) {
-                    mapping.put(KeyEvent.KEYCODE_ESCAPE, button); /* API 11 */
-                }
-            }
-            button.setText(buttonTexts[i]);
-            if (textColor != Color.TRANSPARENT) {
-                button.setTextColor(textColor);
-            }
-            if (buttonBorderColor != Color.TRANSPARENT) {
-                // TODO set color for border of messagebox button
-            }
-            if (buttonBackgroundColor != Color.TRANSPARENT) {
-                Drawable drawable = button.getBackground();
-                if (drawable == null) {
-                    // setting the color this way removes the style
-                    button.setBackgroundColor(buttonBackgroundColor);
-                } else {
-                    // setting the color this way keeps the style (gradient, padding, etc.)
-                    drawable.setColorFilter(buttonBackgroundColor, PorterDuff.Mode.MULTIPLY);
-                }
-            }
-            if (buttonSelectedColor != Color.TRANSPARENT) {
-                // TODO set color for selected messagebox button
-            }
-            buttons.addView(button);
-        }
-
-        // create content
-
-        LinearLayout content = new LinearLayout(this);
-        content.setOrientation(LinearLayout.VERTICAL);
-        content.addView(message);
-        content.addView(buttons);
-        if (backgroundColor != Color.TRANSPARENT) {
-            content.setBackgroundColor(backgroundColor);
-        }
-
-        // add content to dialog and return
-
-        dialog.setView(content);
-        dialog.setOnKeyListener(new Dialog.OnKeyListener() {
-            @Override
-            public boolean onKey(DialogInterface d, int keyCode, KeyEvent event) {
-                Button button = mapping.get(keyCode);
-                if (button != null) {
-                    if (event.getAction() == KeyEvent.ACTION_UP) {
-                        button.performClick();
-                    }
-                    return true; // also for ignored actions
-                }
-                return false;
-            }
-        });
-
-        dialog.show();
-    }
+    protected abstract void showGameNotice(String message, int duration, int gravity, int xOffset, int yOffset);
 
     private final Runnable rehideSystemUi = new Runnable() {
         @Override
@@ -2014,44 +1823,9 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
      */
     public static boolean showToast(String message, int duration, int gravity, int xOffset, int yOffset)
     {
-        if(null == mSingleton) {
-            return false;
-        }
-
-        try
-        {
-            class OneShotTask implements Runnable {
-                private final String mMessage;
-                private final int mDuration;
-                private final int mGravity;
-                private final int mXOffset;
-                private final int mYOffset;
-
-                OneShotTask(String message, int duration, int gravity, int xOffset, int yOffset) {
-                    mMessage  = message;
-                    mDuration = duration;
-                    mGravity  = gravity;
-                    mXOffset  = xOffset;
-                    mYOffset  = yOffset;
-                }
-
-                public void run() {
-                    try
-                    {
-                        Toast toast = Toast.makeText(mSingleton, mMessage, mDuration);
-                        if (mGravity >= 0) {
-                            toast.setGravity(mGravity, mXOffset, mYOffset);
-                        }
-                        toast.show();
-                    } catch(Exception ex) {
-                        Log.e(TAG, ex.getMessage());
-                    }
-                }
-            }
-            mSingleton.runOnUiThread(new OneShotTask(message, duration, gravity, xOffset, yOffset));
-        } catch(Exception ex) {
-            return false;
-        }
+        SDLActivity activity = mSingleton;
+        if (activity == null || activity.isFinishing() || activity.isDestroyed()) return false;
+        activity.runOnUiThread(() -> activity.showGameNotice(message, duration, gravity, xOffset, yOffset));
         return true;
     }
 

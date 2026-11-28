@@ -82,7 +82,7 @@ export function SteamLibraryPage() {
             />
           ) : (
             <>
-              <Icon name="game" />
+              <img className="steam-game-fallback" src="/terraria.png" alt="" />
               <span>{details?.name || 'Terraria'}</span>
               <small>{detailsLoading ? t('正在获取 Steam 封面…') : t('Steam 游戏资源')}</small>
             </>

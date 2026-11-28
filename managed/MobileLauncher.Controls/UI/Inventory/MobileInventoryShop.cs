@@ -14,11 +14,14 @@ public partial class MobileInventorySystem
 {
 	private int selectedShopSlot = -1, selectedShopNpc = -1;
 	private Item[] selectedShopStock;
+	private Item heldShopItem;
+	private ulong nextBuyTick;
 
 	private void SelectShopItem(Item[] stock, int index, Rectangle bounds)
 	{
 		selectedShopStock = stock; selectedShopNpc = Main.LocalPlayer.talkNPC;
 		selectedShopSlot = index;
+		heldShopItem = null;
 		if (!stock[index].IsAir) OpenItemDetails(new InventoryGestureSlot(stock, ItemSlot.Context.ShopItem, index, bounds, false));
 		else CloseRecipeDetails();
 	}
@@ -48,9 +51,28 @@ public partial class MobileInventorySystem
 		InventoryButtonSurface(buy, "SlotShop", available ? Color.White : Color.White * .4f, available);
 		if (available) MobileJoystickSystem.DrawItemIcon(Main.spriteBatch, shop.item[selectedShopSlot], buy.Center.ToVector2() - new Vector2(0, 8 * layout.Scale), buy.Width * .65f, Color.White);
 		Text(T("Buy"), new Rectangle(buy.X, buy.Bottom - (int)(22 * layout.Scale), buy.Width, (int)(22 * layout.Scale)), .8f);
-		if (available && Click(buy)) { BuyShopItem(selectedShopSlot); Recipe.FindRecipes(); }
+		Item offer = available ? shop.item[selectedShopSlot] : null;
+		bool clicked = available && Click(buy);
+		if (ShouldBuy(offer, clicked, pointerDown && !pointerReleased && Hover(buy), !used, InventoryUiTick)) {
+			used = true;
+			BuyShopItem(selectedShopSlot);
+			Recipe.FindRecipes();
+		}
 		double price = Main.LocalPlayer.currentShoppingSettings.PriceAdjustment;
 		Text(T("Price") + $" {price:P0}", layout.Right(300, 260, 150, 32), .75f);
+	}
+
+	private bool ShouldBuy(Item offer, bool clicked, bool held, bool fresh, ulong tick)
+	{
+		if (clicked) {
+			heldShopItem = held ? offer : null;
+			nextBuyTick = tick + 24;
+			return offer != null;
+		}
+		if (!held || !ReferenceEquals(offer, heldShopItem)) heldShopItem = null;
+		if (!fresh || heldShopItem == null || tick < nextBuyTick) return false;
+		nextBuyTick = tick + 6;
+		return true;
 	}
 
 	private void DrawShopSellAction()
@@ -112,11 +134,16 @@ public partial class MobileInventorySystem
 			for (int i = first; i < count; i++) names[i] = "SpecialPrice";
 			return;
 		}
-		var coins = new List<string>();
-		long remaining = price;
-		long[] units = { 1000000, 10000, 100, 1 };
-		for (int i = 0; i < units.Length; i++) { long value = remaining / units[i]; remaining %= units[i]; if (value > 0) coins.Add(value + " " + Lang.inter[15 + i].Value); }
 		names[count] = "Price";
-		text[count++] = (buying ? Lang.tip[50].Value : Lang.tip[49].Value) + " " + (selling <= 0 && !buying ? T("NoValue") : coins.Count == 0 ? T("Free") : string.Join(" ", coins));
+		text[count++] = (buying ? Lang.tip[50].Value : Lang.tip[49].Value) + " " + (selling <= 0 && !buying ? T("NoValue") : CoinPrice(price));
+	}
+
+	private static string CoinPrice(long price)
+	{
+		var coins = new List<string>();
+		int[] amounts = Utils.CoinsSplit(price);
+		for (int i = 3; i >= 0; i--)
+			if (amounts[i] > 0) coins.Add(amounts[i] + " " + Lang.inter[18 - i].Value);
+		return coins.Count == 0 ? T("Free") : string.Join(" ", coins);
 	}
 }

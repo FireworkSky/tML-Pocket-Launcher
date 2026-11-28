@@ -225,11 +225,261 @@ int music(const UnityResources &unity, const fs::path &workspace, const fs::path
     return tracks.size();
 }
 
-bool validXnb(View data)
+struct AtlasAlias {
+    std::string_view desktopPath, mobilePath;
+};
+
+// The mobile atlas indexes these NPC textures under their town profile names.
+constexpr AtlasAlias atlasAliases[] = {
+    {"Images/NPC_107.xnb", "TownNPCs/GoblinTinkerer_Default.png"},
+    {"Images/NPC_108.xnb", "TownNPCs/Wizard_Default.png"},
+    {"Images/NPC_108_Alt_1.xnb", "TownNPCs/Wizard_Default_Party.png"},
+    {"Images/NPC_124.xnb", "TownNPCs/Mechanic_Default.png"},
+    {"Images/NPC_124_Alt_1.xnb", "TownNPCs/Mechanic_Default_Party.png"},
+    {"Images/NPC_142.xnb", "TownNPCs/Santa_Default.png"},
+    {"Images/NPC_142_Alt_1.xnb", "TownNPCs/Santa_Default_Party.png"},
+    {"Images/NPC_160.xnb", "TownNPCs/Truffle_Default.png"},
+    {"Images/NPC_17.xnb", "TownNPCs/Merchant_Default.png"},
+    {"Images/NPC_178.xnb", "TownNPCs/Steampunker_Default.png"},
+    {"Images/NPC_178_Alt_1.xnb", "TownNPCs/Steampunker_Default_Party.png"},
+    {"Images/NPC_17_Alt_1.xnb", "TownNPCs/Merchant_Default_Party.png"},
+    {"Images/NPC_18.xnb", "TownNPCs/Nurse_Default.png"},
+    {"Images/NPC_18_Alt_1.xnb", "TownNPCs/Nurse_Default_Party.png"},
+    {"Images/NPC_19.xnb", "TownNPCs/ArmsDealer_Default.png"},
+    {"Images/NPC_20.xnb", "TownNPCs/Dryad_Default.png"},
+    {"Images/NPC_207.xnb", "TownNPCs/DyeTrader_Default.png"},
+    {"Images/NPC_207_Alt_1.xnb", "TownNPCs/DyeTrader_Default_Party.png"},
+    {"Images/NPC_208.xnb", "TownNPCs/PartyGirl_Default.png"},
+    {"Images/NPC_209.xnb", "TownNPCs/Cyborg_Default.png"},
+    {"Images/NPC_209_Alt_1.xnb", "TownNPCs/Cyborg_Default_Party.png"},
+    {"Images/NPC_22.xnb", "TownNPCs/Guide_Default.png"},
+    {"Images/NPC_227.xnb", "TownNPCs/Painter_Default.png"},
+    {"Images/NPC_227_Alt_1.xnb", "TownNPCs/Painter_Default_Party.png"},
+    {"Images/NPC_228.xnb", "TownNPCs/WitchDoctor_Default.png"},
+    {"Images/NPC_229.xnb", "TownNPCs/Pirate_Default.png"},
+    {"Images/NPC_229_Alt_1.xnb", "TownNPCs/Pirate_Default_Party.png"},
+    {"Images/NPC_353.xnb", "TownNPCs/Stylist_Default.png"},
+    {"Images/NPC_353_Alt_1.xnb", "TownNPCs/Stylist_Default_Party.png"},
+    {"Images/NPC_368.xnb", "TownNPCs/TravelingMerchant_Default.png"},
+    {"Images/NPC_368_Alt_1.xnb", "TownNPCs/TravelingMerchant_Default_Party.png"},
+    {"Images/NPC_369.xnb", "TownNPCs/Angler_Default.png"},
+    {"Images/NPC_369_Alt_1.xnb", "TownNPCs/Angler_Default_Party.png"},
+    {"Images/NPC_37.xnb", "TownNPCs/OldMan_Default.png"},
+    {"Images/NPC_38_Alt_1.xnb", "TownNPCs/Demolitionist_Default_Party.png"},
+    {"Images/NPC_441.xnb", "TownNPCs/TaxCollector_Default.png"},
+    {"Images/NPC_441_Alt_1.xnb", "TownNPCs/TaxCollector_Default_Party.png"},
+    {"Images/NPC_453.xnb", "TownNPCs/SkeletonMerchant_Default.png"},
+    {"Images/NPC_453_Alt_1.xnb", "TownNPCs/SkeletonMerchant_Default_Party.png"},
+    {"Images/NPC_54.xnb", "TownNPCs/Clothier_Default.png"},
+    {"Images/NPC_54_Alt_1.xnb", "TownNPCs/Clothier_Default_Party.png"},
+    {"Images/NPC_588.xnb", "TownNPCs/Golfer_Default.png"},
+    {"Images/NPC_588_Alt_1.xnb", "TownNPCs/Golfer_Default_Party.png"},
+    {"Images/NPC_633.xnb", "TownNPCs/BestiaryGirl_Default.png"},
+    {"Images/NPC_633_Alt_1.xnb", "TownNPCs/BestiaryGirl_Default_Transformed.png"},
+    {"Images/NPC_633_Alt_2.xnb", "TownNPCs/BestiaryGirl_Default_Transformed.png"},
+    {"Images/NPC_637.xnb", "TownNPCs/Cat_Siamese.png"},
+    {"Images/NPC_638.xnb", "TownNPCs/Dog_Labrador.png"},
+    {"Images/NPC_656.xnb", "TownNPCs/Bunny_White.png"},
+    {"Images/NPC_663.xnb", "TownNPCs/Princess_Default.png"},
+    {"Images/NPC_670.xnb", "TownNPCs/SlimeBlue_Default.png"},
+    {"Images/NPC_678.xnb", "TownNPCs/SlimeGreen_Default.png"},
+    {"Images/NPC_679.xnb", "TownNPCs/SlimeOld_Default.png"},
+    {"Images/NPC_680.xnb", "TownNPCs/SlimePurple_Default.png"},
+    {"Images/NPC_681.xnb", "TownNPCs/SlimeRainbow_Default.png"},
+    {"Images/NPC_682.xnb", "TownNPCs/SlimeRed_Default.png"},
+    {"Images/NPC_683.xnb", "TownNPCs/SlimeYellow_Default.png"},
+    {"Images/NPC_684.xnb", "TownNPCs/SlimeCopper_Default.png"},
+};
+
+struct AtlasHashAlias {
+    std::string_view desktopPath;
+    uint32_t spriteHash;
+};
+
+// These atlas records have the target dimensions and matching premultiplied pixels.
+constexpr AtlasHashAlias atlasHashAliases[] = {
+    {"Images/Background_276.xnb", 0xe326a66f},
+    {"Images/NPC_363.xnb", 0xda796757},
+    {"Images/NPC_365.xnb", 0x553992f7},
+    {"Images/NPC_373.xnb", 0x1125b4f2},
+    {"Images/NPC_565.xnb", 0x36e9a7cd},
+    {"Images/NPC_567.xnb", 0x4c29f4ad},
+    {"Images/NPC_573.xnb", 0x72f581c8},
+    {"Images/NPC_577.xnb", 0x87752708},
+    {"Images/NPC_603.xnb", 0x5e18abed},
+    {"Images/NPC_609.xnb", 0x14a8b34c},
+    {"Images/UI/DisplaySlots_4.xnb", 0xfa94b98c},
+    {"Images/UI/DisplaySlots_5.xnb", 0xbd34c35c},
+};
+
+// The same PE sprites back the launcher's mobile list and search controls.
+constexpr AtlasHashAlias uiIconAliases[] = {
+    {"Images/UI/ButtonDelete.xnb", 0x0bde99f1},
+    {"Images/UI/ButtonPlay.xnb", 0x9c60fdad},
+    {"Images/UI/ButtonRename.xnb", 0x11a35941},
+    {"Images/UI/ButtonSeed.xnb", 0xd361f275},
+    {"Images/UI/SearchCancel.xnb", 0x8bbb7e6a},
+};
+
+// PE shares indexed background pixels across variants and keeps each variant's palette.
+constexpr AtlasAlias backgroundPaletteSources[] = {
+    {"Images/Background_10.xnb", "background_30.png"},
+    {"Images/Background_102.xnb", "background_104.png"},
+    {"Images/Background_103.xnb", "background_104.png"},
+    {"Images/Background_11.xnb", "background_31.png"},
+    {"Images/Background_16.xnb", "background_15.png"},
+    {"Images/Background_177.xnb", "background_275.png"},
+    {"Images/Background_208.xnb", "background_207.png"},
+    {"Images/Background_211.xnb", "background_213.png"},
+    {"Images/Background_212.xnb", "background_213.png"},
+    {"Images/Background_23.xnb", "background_22.png"},
+    {"Images/Background_24.xnb", "background_22.png"},
+    {"Images/Background_25.xnb", "background_22.png"},
+    {"Images/Background_48.xnb", "background_46.png"},
+    {"Images/Background_50.xnb", "background_52.png"},
+    {"Images/Background_51.xnb", "background_52.png"},
+    {"Images/Background_57.xnb", "background_56.png"},
+    {"Images/Background_58.xnb", "background_56.png"},
+    {"Images/Background_61.xnb", "background_60.png"},
+    {"Images/Background_9.xnb", "background_29.png"},
+    {"Images/Background_97.xnb", "background_95.png"},
+};
+
+Image sharedPaletteTexture(const UnityResources &unity, const Regions &regions, const Region &target,
+    const Required &item)
 {
-    if (data.size() < 10 || data[0] != 'X' || data[1] != 'N' || data[2] != 'B') return false;
-    Reader header{data, 6};
-    return header.read<uint32_t>() == data.size();
+    const auto background = std::ranges::find(backgroundPaletteSources, item.path, &AtlasAlias::desktopPath);
+    const bool water = item.path.starts_with("Images/Misc/water_") && item.width == 48 && item.height == 1360;
+    require(background != std::end(backgroundPaletteSources) || water, "Missing PE atlas image");
+    const auto sourceName = water ? "misc/water_0.png" : std::string(background->mobilePath);
+    const auto source = regions.find(key(sourceName));
+    require(source != regions.end() && source->second.size() == 1, "Missing or ambiguous shared PE atlas image");
+    const auto &region = source->second.front();
+    auto indices = unpackSprite(unity.texture(unity.get(region.sheet)), region);
+    const auto palette = unity.texture(unity.get(target.sheet + "_p"));
+    require(palette.width == 256 && palette.height == 1 && indices.width == item.width &&
+        target.width * target.divisor == item.width && target.height * target.divisor == item.height,
+        "Unexpected shared PE atlas dimensions");
+    const bool extendBottom = item.path == "Images/Background_208.xnb" && indices.height == 400 && item.height == 464;
+    require(indices.height == item.height || extendBottom, "Unexpected shared PE atlas height");
+
+    Image result(item.width, item.height);
+    for (size_t i = 0; i < indices.rgba.size(); i += 4)
+        std::copy_n(palette.rgba.data() + palette.offset(indices.rgba[i + 3], 0), 4, result.rgba.data() + i);
+    if (extendBottom) {
+        const auto row = result.rgba.data() + result.offset(0, indices.height - 1);
+        for (int x = 1; x < result.width; ++x)
+            require(std::equal(row, row + 4, row + x * 4), "PE background does not end in a solid row");
+        for (int y = indices.height; y < result.height; ++y)
+            std::copy_n(row, size_t(result.width) * 4, result.rgba.data() + result.offset(0, y));
+    }
+    return result;
+}
+
+Image repackSunflower(const Image &image)
+{
+    constexpr int frames = 19;
+    constexpr int mobileFrameHeight = 54, targetFrameHeight = 53;
+    require(image.width == 52 && image.height == 1028, "Unexpected PE sunflower frame layout");
+    Image result(image.width, frames * targetFrameHeight);
+    const auto checkPadding = [&](int row) {
+        for (int x = 0; x < image.width; ++x)
+            require(image.rgba[image.offset(x, row) + 3] == 0, "PE sunflower frame padding is not transparent");
+    };
+    for (int frame = 0; frame < frames; ++frame) {
+        checkPadding(frame * mobileFrameHeight);
+        const auto source = image.rgba.data() + image.offset(0, frame * mobileFrameHeight + 1);
+        const auto target = result.rgba.data() + result.offset(0, frame * targetFrameHeight);
+        std::copy_n(source, size_t(image.width) * targetFrameHeight * 4, target);
+    }
+    for (int row = frames * mobileFrameHeight; row < image.height; ++row) checkPadding(row);
+    return result;
+}
+
+struct MinimapLayout {
+    std::string_view name;
+    std::array<int, 4> mobileOpening, targetOpening;
+};
+
+constexpr MinimapLayout minimapLayouts[] = {
+    {"Default", {20, 18, 252, 160}, {8, 14, 240, 246}},
+    {"Golden", {18, 16, 254, 162}, {8, 8, 244, 244}},
+    {"Leaf", {26, 22, 246, 160}, {22, 22, 246, 250}},
+    {"Remix", {20, 18, 252, 160}, {10, 10, 242, 242}},
+    {"Retro", {20, 18, 252, 160}, {10, 10, 242, 242}},
+    {"Sticks", {22, 20, 250, 160}, {12, 12, 240, 242}},
+    {"StoneGold", {18, 16, 254, 160}, {12, 12, 248, 248}},
+    {"TwigLeaf", {20, 20, 252, 152}, {32, 20, 246, 242}},
+    {"Valkyrie", {20, 24, 252, 160}, {10, 16, 242, 242}},
+};
+
+Image fitSlices(const Image &image, int width, int height,
+    const std::array<int, 4> &sourceOpening, const std::array<int, 4> &targetOpening)
+{
+    const std::array srcX{0, sourceOpening[0], sourceOpening[2], image.width};
+    const std::array srcY{0, sourceOpening[1], sourceOpening[3], image.height};
+    const std::array dstX{0, targetOpening[0], targetOpening[2], width};
+    const std::array dstY{0, targetOpening[1], targetOpening[3], height};
+    require(srcX[2] < image.width && srcY[2] < image.height && dstX[2] < width && dstY[2] < height,
+        "Unexpected sliced texture dimensions");
+    Image result(width, height);
+    const auto sample = [](int pos, const auto &src, const auto &dst) {
+        const int segment = pos < dst[1] ? 0 : pos < dst[2] ? 1 : 2;
+        return src[segment] + (pos - dst[segment]) * (src[segment + 1] - src[segment]) /
+            (dst[segment + 1] - dst[segment]);
+    };
+    for (int y = 0; y < height; ++y) {
+        const int sy = sample(y, srcY, dstY);
+        for (int x = 0; x < width; ++x) {
+            const int sx = sample(x, srcX, dstX);
+            std::copy_n(image.rgba.data() + image.offset(sx, sy), 4, result.rgba.data() + result.offset(x, y));
+        }
+    }
+    return result;
+}
+
+Image fitIcon(const Image &image, int width, int height)
+{
+    Image result(width, height);
+    const double scale = std::min({1.0, double(width) / image.width, double(height) / image.height});
+    const int iconWidth = std::max(1, int(image.width * scale));
+    const int iconHeight = std::max(1, int(image.height * scale));
+    const int left = (width - iconWidth) / 2, top = (height - iconHeight) / 2;
+    for (int y = 0; y < iconHeight; ++y) {
+        for (int x = 0; x < iconWidth; ++x) {
+            const int sx = (2 * x + 1) * image.width / (2 * iconWidth);
+            const int sy = (2 * y + 1) * image.height / (2 * iconHeight);
+            std::copy_n(image.rgba.data() + image.offset(sx, sy), 4, result.rgba.data() + result.offset(left + x, top + y));
+        }
+    }
+    return result;
+}
+
+Image fitBestiaryStat(const Image &image, int width, int height)
+{
+    // The desktop UI right-aligns the stat text within the texture's full width.
+    Image result(width, height);
+    const auto icon = fitIcon(image, 30, height);
+    for (int y = 0; y < height; ++y)
+        std::copy_n(icon.rgba.data() + icon.offset(0, y), size_t(icon.width) * 4, result.rgba.data() + result.offset(0, y));
+    return result;
+}
+
+bool isPanel(std::string_view path)
+{
+    return path == "Images/Chat_Back.xnb" || path == "Images/HairStyleBack.xnb" || path == "Images/ClothesStyleBack.xnb";
+}
+
+bool isMapModeIcon(std::string_view path)
+{
+    return path.size() == sizeof("Images/Map_0.xnb") - 1 && path.starts_with("Images/Map_") &&
+        path[11] >= '0' && path[11] <= '7';
+}
+
+bool isMinimapZoomButton(std::string_view path)
+{
+    return path.starts_with("Images/UI/Minimap/") &&
+        (path.ends_with("/MinimapButton_ZoomIn.xnb") || path.ends_with("/MinimapButton_ZoomOut.xnb"));
 }
 
 // Verified against the decoded 2026.09.3.1 profile textures. The checksums cover
@@ -266,15 +516,7 @@ Bytes adjustedTexture(const Required &item, const Image &image)
     return payload;
 }
 
-std::string quote(std::string_view value)
-{
-    std::string result = "\"";
-    for (unsigned char c : value) {
-        if (c == '"' || c == '\\') result += '\\';
-        result += c < 32 ? '?' : static_cast<char>(c);
-    }
-    return result + '"';
-}
+
 }
 
 std::string convert(const fs::path &workspace, const fs::path &output, const Progress &progress)
@@ -295,6 +537,39 @@ std::string convert(const fs::path &workspace, const fs::path &output, const Pro
         const fs::path relative = fs::path(item.path.substr(7)).replace_extension(".png");
         auto entries = regions.find(key(relative.generic_string()));
         if (entries == regions.end()) entries = regions.find(key(relative.filename().string()));
+        if (entries == regions.end() || std::ranges::none_of(entries->second, [&](const Region &region) {
+            return unity.assets.contains(region.sheet);
+        })) {
+            const auto alias = std::ranges::find(atlasHashAliases, item.path, &AtlasHashAlias::desktopPath);
+            if (alias != std::end(atlasHashAliases)) {
+                const auto alternate = regions.find(alias->spriteHash);
+                if (alternate != regions.end()) entries = alternate;
+            }
+        }
+        if (entries == regions.end()) {
+            const auto alias = std::ranges::find(atlasAliases, item.path, &AtlasAlias::desktopPath);
+            if (alias != std::end(atlasAliases)) {
+                entries = regions.find(key(std::string(alias->mobilePath)));
+                if (entries == regions.end())
+                    entries = regions.find(key(fs::path(alias->mobilePath).filename().string()));
+            }
+        }
+        if (entries == regions.end() && isMapModeIcon(item.path)) {
+            const int state = item.path[11] - '0';
+            switch (state % 4) {
+                case 1: return loadAtlas(unity, "content/images/ui/minimapdefault/hideminimap");
+                case 2: entries = regions.find(state < 4 ? 0xd2a2c6bb : 0xd2d1d2bc); break;
+                case 3: return loadAtlas(unity, "content/images/ui/minimapdefault/showminimap");
+                default: entries = regions.find(0x80987346); break;
+            }
+        }
+        if (entries == regions.end() && isMinimapZoomButton(item.path)) {
+            entries = regions.find(item.path.ends_with("/MinimapButton_ZoomIn.xnb") ? 0xb0ab9470 : 0xc5ab9c74);
+        }
+        if (entries == regions.end()) {
+            const auto icon = std::ranges::find(uiIconAliases, item.path, &AtlasHashAlias::desktopPath);
+            if (icon != std::end(uiIconAliases)) entries = regions.find(icon->spriteHash);
+        }
         require(entries != regions.end(), "No atlas entry");
         const Region *chosen = nullptr;
         for (const auto &region : entries->second) {
@@ -304,6 +579,8 @@ std::string convert(const fs::path &workspace, const fs::path &output, const Pro
             chosen = &region;
         }
         require(chosen, "No matching atlas entry");
+        if (!unity.assets.contains(chosen->sheet))
+            return sharedPaletteTexture(unity, regions, *chosen, item);
         auto cached = std::ranges::find_if(sheets, [&](const auto &sheet) { return sheet.first == chosen->sheet; });
         if (cached == sheets.end()) {
             if (sheets.size() == 4) sheets.pop_back();
@@ -312,7 +589,7 @@ std::string convert(const fs::path &workspace, const fs::path &output, const Pro
         return unpackSprite(sheets.front().second, *chosen);
     };
     int images = 0, sounds = 0, fonts = 0;
-    std::vector<std::string> fallbacks;
+    std::vector<int> silentItemSounds;
     for (size_t i = 0; i < required.size(); ++i) {
         progress("assets", i, required.size());
         const auto &item = required[i];
@@ -321,26 +598,59 @@ std::string convert(const fs::path &workspace, const fs::path &output, const Pro
         const auto asset = unity.assets.find(mobile);
         try {
             if (item.path.starts_with("Images/")) {
-                Bytes payload;
-                try {
-                    auto image = texture(item, asset);
-                    payload = image.width == item.width && image.height == item.height
-                        ? texturePayload(std::move(image))
-                        : adjustedTexture(item, image);
-                } catch (const std::runtime_error &) {
-                    const auto fallback = workspace / "fallback" / item.path;
-                    if (!fs::is_regular_file(fallback)) throw;
-                    MappedFile file(fallback);
-                    require(validXnb(file.bytes()), "Invalid fallback texture");
-                    save(content / item.path, file.bytes());
-                    fallbacks.push_back(item.path);
-                    continue;
+                auto image = texture(item, asset);
+                if (item.path == "Images/UI/Sunflower_Loading.xnb" && item.width == 52 &&
+                    item.height == 1007 && image.height != item.height)
+                    image = repackSunflower(image);
+                if (item.width == 22 && item.height == 22 && image.width == 32 && image.height == 32 &&
+                    (item.path == "Images/UI/ButtonCloudActive.xnb" || item.path == "Images/UI/ButtonCloudInactive.xnb" ||
+                     item.path == "Images/UI/ButtonFavoriteActive.xnb" || item.path == "Images/UI/ButtonFavoriteInactive.xnb"))
+                    image = fitIcon(image, item.width, item.height);
+                if (image.width != item.width || image.height != item.height) {
+                    const std::string_view path = item.path;
+                    if (isMapModeIcon(path) || isMinimapZoomButton(path) ||
+                        std::ranges::find(uiIconAliases, path, &AtlasHashAlias::desktopPath) != std::end(uiIconAliases)) {
+                        image = fitIcon(image, item.width, item.height);
+                    } else if (isPanel(path) && image.width == 32 && image.height == 32) {
+                        image = fitSlices(image, item.width, item.height,
+                            {8, 8, 24, 24}, {8, 8, item.width - 8, item.height - 8});
+                    } else if (path.starts_with("Images/UI/Bestiary/Stat_") && image.width == 32 && image.height == 32 &&
+                        item.height == 31 && (item.width == 47 || item.width == 96)) {
+                        image = fitBestiaryStat(image, item.width, item.height);
+                    } else if (path == "Images/UI/Bestiary/Portrait_Front.xnb" && image.width == 16 && image.height == 16 &&
+                        item.width == 193 && item.height == 112) {
+                        image = fitSlices(image, item.width, item.height,
+                            {4, 4, 12, 12}, {4, 4, item.width - 4, item.height - 4});
+                    } else if (path.starts_with("Images/UI/Minimap/") && path.ends_with("/MinimapFrame.xnb") &&
+                        image.width == 272 && image.height == 180) {
+                        const auto theme = path.substr(18, path.find('/', 18) - 18);
+                        const auto layout = std::ranges::find(minimapLayouts, theme, &MinimapLayout::name);
+                        require(layout != std::end(minimapLayouts), "Unknown minimap theme");
+                        image = fitSlices(image, item.width, item.height, layout->mobileOpening, layout->targetOpening);
+                    }
                 }
+                const auto payload = image.width == item.width && image.height == item.height
+                    ? texturePayload(std::move(image))
+                    : adjustedTexture(item, image);
                 writeXnb(content / item.path, textureReaders, payload);
                 ++images;
             } else if (item.path.starts_with("Sounds/")) {
-                writeXnb(content / item.path, soundReaders,
-                    soundPayload(decode(workspace, unity.audio(unity.get(mobile)))), false);
+                Audio audio;
+                if (asset != unity.assets.end()) {
+                    audio = decode(workspace, unity.audio(asset->second));
+                } else {
+                    constexpr std::string_view itemPrefix = "content/sounds/item_";
+                    if (!mobile.starts_with(itemPrefix)) throw std::runtime_error("Missing Unity asset: " + mobile);
+                    int number = 0;
+                    const auto end = mobile.data() + mobile.size();
+                    const auto parsed = std::from_chars(mobile.data() + itemPrefix.size(), end, number);
+                    // Older PE builds omit these item sounds. Keep their XNB slots valid.
+                    if (parsed.ec != std::errc{} || parsed.ptr != end || number < 199 || number > 210)
+                        throw std::runtime_error("Missing Unity asset: " + mobile);
+                    audio = Audio{1, 22050, Bytes(220 * 2, 0)};
+                    silentItemSounds.push_back(number);
+                }
+                writeXnb(content / item.path, soundReaders, soundPayload(audio), false);
                 ++sounds;
             } else {
                 writeXnb(content / item.path, fontReaders, fontPayload(unity, mobile));
@@ -351,20 +661,15 @@ std::string convert(const fs::path &workspace, const fs::path &output, const Pro
         }
     }
     sheets.clear();
-    for (const auto name : {"PixelShader.xnb", "ScreenShader.xnb", "TileShader.xnb"}) {
-        MappedFile effect(workspace / name);
-        require(validXnb(effect.bytes()), "Invalid compiled shader");
-        save(content / name, effect.bytes());
-    }
     const auto tracks = music(unity, workspace, content, progress);
     std::string report = "{\"complete\":true,\"missing\":[],\"required_files\":" +
-        std::to_string(required.size() + 6) + ",\"converted\":{\"Images\":" + std::to_string(images) +
+        std::to_string(required.size() + 3) + ",\"converted\":{\"Images\":" + std::to_string(images) +
         ",\"Sounds\":" + std::to_string(sounds) + ",\"Fonts\":" + std::to_string(fonts) +
         "},\"music_tracks_from_apk\":" + std::to_string(tracks) +
-        ",\"control_sprites\":" + std::to_string(controlSprites) + ",\"fallback_textures\":[";
-    for (size_t i = 0; i < fallbacks.size(); ++i) {
+        ",\"control_sprites\":" + std::to_string(controlSprites) + ",\"fallback_textures\":[],\"silent_item_sounds\":[";
+    for (size_t i = 0; i < silentItemSounds.size(); ++i) {
         if (i) report += ',';
-        report += quote(fallbacks[i]);
+        report += std::to_string(silentItemSounds[i]);
     }
     report += "],\"vorbis_setup_ids\":[";
     size_t setupIndex = 0;

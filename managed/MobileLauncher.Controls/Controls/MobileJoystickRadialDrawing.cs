@@ -28,7 +28,7 @@ public partial class MobileJoystickSystem
 				};
 			Vector2 iconPosition = center + new Vector2((float)Math.Sin(i * MathHelper.PiOver2), -(float)Math.Cos(i * MathHelper.PiOver2)) * radius * 0.75f;
 			if (action.HasValue && radial.SelectedSlot == i)
-				ControlTexturePackSystem.TryDrawDefault(spriteBatch, "PhoneYellowCircle", iconPosition, radial.Button.Radius * 2f, Color.White);
+				DefaultControlTextures.TryDrawDefault(spriteBatch, "PhoneYellowCircle", iconPosition, radial.Button.Radius * 2f, Color.White);
 			if (custom) {
 				MobileControlAction bound = action ?? MobileControlAction.Unbound;
 				if (bound == MobileControlAction.KeyboardKey && radial.Button.RadialKeyboardKeys?.Count > i)

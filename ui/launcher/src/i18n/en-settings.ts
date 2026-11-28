@@ -1,10 +1,38 @@
 const settings: Record<string, string> = {
   外观: 'Appearance',
   游戏与运行: 'Game & Runtime',
+  解锁高刷新率: 'Unlock high refresh rate',
+  '下次启动游戏时请求屏幕支持的最高刷新率。配合 120 FPS 补丁使用，实际帧率取决于系统设置和游戏负载。':
+    'Request the highest supported display refresh rate on the next launch. Use with the 120 FPS patch. Actual frame rate depends on system settings and game workload.',
+  停止限制子进程: 'Disable child process restrictions',
+  '在系统开发者选项中打开「停止限制子进程」，并保持开发者选项开启，以减少子进程被系统结束的情况。':
+    'Enable “Disable child process restrictions” in Android Developer options and keep Developer options enabled to reduce child process terminations.',
+  '已停止限制。': 'Child process restrictions are disabled.',
+  '系统仍在限制子进程。': 'Android is restricting child processes.',
+  '请在系统设置中确认开关状态。': 'Check the switch in system settings.',
+  '请在系统设置中搜索开发者选项。': 'Search for Developer options in system settings.',
+  打开开发者选项: 'Open Developer options',
+  分享启动器诊断包: 'Share launcher diagnostic ZIP',
+  分享游戏崩溃诊断包: 'Share game crash diagnostic ZIP',
   触控与输入: 'Touch & Input',
   存储与下载: 'Storage & Downloads',
   关于: 'About',
   控制管理: 'Control Management',
+  控制布局包: 'Control layout packs',
+  管理布局包: 'Manage layout packs',
+  导入布局包: 'Import layout pack',
+  布局包名称: 'Pack name',
+  保存当前布局为包: 'Save current layout as a pack',
+  '正在读取布局包…': 'Loading layout packs…',
+  '尚无布局包。保存当前布局，或导入他人分享的 ZIP。':
+    'No layout packs yet. Save your current layout or import a shared ZIP.',
+  '用此包替换当前布局？': 'Replace the current layout with this pack?',
+  '删除这个布局包？': 'Delete this layout pack?',
+  '布局已应用，下次启动游戏时生效。': 'Layout applied. Changes take effect on the next game launch.',
+  布局包已导出: 'Layout pack exported',
+  分享: 'Share',
+  确认: 'Confirm',
+  刷新: 'Refresh',
   设置分类: 'Settings categories',
   '背景已保存。': 'Background saved.',
   自定义色调: 'Custom Tint',
@@ -20,6 +48,7 @@ const settings: Record<string, string> = {
   '选择启动器使用的主题视觉样式。': 'Choose the launcher’s visual theme.',
   默认: 'Default',
   泰拉风: 'Terraria Style',
+  玻璃风: 'Glass Style',
   启动器方向: 'Launcher Orientation',
   '默认横屏，切换后保留当前页面。':
     'Defaults to landscape. Changing the orientation keeps the current page open.',
@@ -59,10 +88,13 @@ const settings: Record<string, string> = {
   启动前校验: 'Pre-launch Validation',
   '检查资源、模组依赖与补丁兼容状态。': 'Check assets, mod dependencies, and patch compatibility.',
   渲染模式: 'Rendering Mode',
+  内部渲染分辨率: 'Internal Rendering Resolution',
+  '降低分辨率可减轻绘制负担，画面会变软，视野也可能缩小。下次启动生效。':
+    'Lower resolution reduces rendering load, softens the image and may narrow the view. Applies on next launch.',
+  '原始分辨率（关闭）': 'Original resolution (Off)',
+  '60%（受游戏最低分辨率限制）': '60% (subject to the game minimum)',
   '只展示当前设备可用的渲染选项。': 'Shows the rendering options available on this device.',
   自动选择: 'Automatic',
-  分辨率比例: 'Render Scale',
-  '降低比例可减轻渲染负担。': 'Lower the scale to reduce rendering load.',
   启动参数: 'Launch Arguments',
   '高级选项，启动时应用。': 'Advanced options applied at launch.',
   编辑参数: 'Edit Arguments',
@@ -92,10 +124,87 @@ const settings: Record<string, string> = {
   '只清理临时下载和可重建缓存。': 'Clear temporary downloads and caches that can be rebuilt.',
   管理缓存: 'Manage Cache',
   关于启动器: 'About the Launcher',
+  '打开{folder}': 'Open {folder}',
+  目录尚未创建或无法访问: 'This folder does not exist yet or cannot be accessed.',
+  未找到可打开目录的文件管理器: 'No file manager is available to open this folder.',
+  '在 Android 上玩 tModLoader。导入自己的 Terraria 资源，为不同玩法建立实例，各自保存角色、世界、模组和触控布局。':
+    'Play tModLoader on Android with your own Terraria assets. Create separate instances for different playthroughs, each with its own characters, worlds, mods and touch layout.',
+  'FireworkSky 开发和维护这款启动器，将桌面版 tModLoader 适配到 Android。':
+    'FireworkSky develops and maintains this launcher to bring the desktop version of tModLoader to Android.',
+  '源代码、构建步骤和改动记录都在 GitHub 仓库中。':
+    'Browse the source code, build instructions and commit history on GitHub.',
+  贡献者与致谢: 'Contributors and credits',
+  'Aalt-hy 参与了工作区标签、页面过渡和玻璃面板的设计。游戏内触控基于 yu 的 MobileJoystick，部分 Android 适配来自 RotatingartLauncher。':
+    'Aalt-hy contributed workspace tabs, page transitions and glass panels. The touch controls build on MobileJoystick by yu. Parts of the Android port come from RotatingartLauncher.',
+  查看贡献记录: 'View contributions',
+  第一次使用: 'Getting started',
+  '从选择 Steam、GOG 或手机版资源开始，跟着指南完成首次启动，再添加想玩的模组。':
+    'Follow the guide to select Steam, GOG or mobile game assets, launch the game for the first time and add mods.',
+  阅读入门指南: 'Read the guide',
+  版本与更新: 'Releases and updates',
+  '在发布页查看各版本的更新说明和可下载的 APK。':
+    'Find release notes and APK downloads on the releases page.',
+  查看发布版本: 'View releases',
+  '在「tML Pocket Launcher 一群」聊模组搭配、分享触控布局，或请群友一起排查安装问题。':
+    'Join tML Pocket Launcher QQ Group 1 to compare mod setups, share touch layouts or get help with installation.',
+  '来和其他玩家交流游玩体验。分享设备型号、模组版本和截图，方便大家比较同一模组在不同手机上的表现。':
+    'Compare notes with other players. Share your phone model, mod version and screenshots to see how the same mod runs on different devices.',
+  报告问题或提出建议: 'Report a problem or suggest a change',
+  '遇到能重复出现的问题，可以在 GitHub Issues 留下操作步骤和诊断日志，并在同一条记录里跟进进展。':
+    'If you can reproduce a problem, post the steps and diagnostic logs in a GitHub issue and follow its progress there.',
+  '如果你喜欢用这款启动器玩模组，可以通过 FireworkSky 的爱发电主页自愿赞助项目。':
+    'If you enjoy playing mods with the launcher, you can support the project through FireworkSky’s Afdian page.',
+  前往爱发电: 'Support on Afdian',
+  参与项目: 'Contribute to the project',
+  '发现文档漏了一步，或已经修好了一个问题？可以提交文档修改、代码补丁和设备测试结果。':
+    'Found a missing step in a guide or fixed a bug? Share a documentation change, code patch or device test results.',
+  阅读贡献指南: 'Read the contribution guide',
+  '感谢支持开发的玩家。这里展示愿意公开署名的支持者昵称。':
+    'Thank you to the players supporting development. This list shows the nicknames of supporters who choose to be credited.',
+  项目作者: 'Project author',
+  项目地址: 'Project repository',
+  社区交流: 'Community',
+  'QQ 群': 'QQ group',
+  '加入 QQ 群': 'Join the QQ group',
+  '加入 Discord': 'Join Discord',
+  支持我们: 'Support us',
+  赞助地址: 'Sponsorship',
+  前往赞助页面: 'Open sponsorship page',
+  支持者名单: 'Supporters',
+  暂无公开名单: 'No public list yet',
+  链接待公布: 'Link coming soon',
+  日志与许可: 'Logs and licenses',
+  使用前请阅读: 'Before you use the launcher',
+  '法律声明、注意事项与问题反馈': 'Legal notice, usage notes and issue reporting',
+  法律声明: 'Legal notice',
+  'Terraria 及第三方素材和商标归各自权利人所有。请通过合法渠道取得游戏资源，并遵守相应的使用条款。':
+    'Terraria and third-party assets and trademarks belong to their respective owners. Obtain game assets through authorized channels and follow their terms of use.',
+  '启动器自有代码采用 GPL-3.0-only 许可，第三方组件适用各自的许可条款。':
+    'The original launcher code is licensed under GPL-3.0-only. Third-party components follow their own license terms.',
+  开源许可证: 'Open-source license',
+  第三方声明: 'Third-party notices',
+  使用注意事项: 'Usage notes',
+  '导入游戏和模组前，请确认 Terraria、tModLoader 与模组的版本兼容。':
+    'Check that your Terraria, tModLoader, and mod versions are compatible before importing them.',
+  '更新游戏、更换模组或清理应用数据前，请先备份角色和世界存档。':
+    'Back up your characters and worlds before updating the game, changing mods, or clearing app data.',
+  如何反馈问题: 'How to report an issue',
+  '在项目的 GitHub Issues 搜索是否已有同类问题。找不到时，创建一个新 Issue。':
+    'Search the project’s GitHub Issues for an existing report. If you cannot find one, open a new issue.',
+  '写明手机型号、Android 版本、启动器和 tModLoader 版本，附上复现步骤、预期结果和实际结果。若问题与模组有关，请提供模组名称及版本。':
+    'Include your phone model, Android version, launcher and tModLoader versions, steps to reproduce, and what you expected and observed. For mod-related issues, include the mod name and version.',
+  '可从「设置 → 关于 → 诊断日志」查看并导出日志。分享前请移除账号、令牌等个人信息，并避免上传游戏资源文件。':
+    'View and export logs under Settings → About → Diagnostic logs. Before sharing, remove account details, tokens and other personal information. Share logs without including game assets.',
+  '查看 GitHub Issues': 'View GitHub Issues',
+  退出启动器: 'Exit launcher',
+  同意并进入: 'Agree and continue',
+  '正在保存…': 'Saving…',
+  '无法保存同意状态，请重试。': 'Could not save your choice. Try again.',
   'Android 上的 tModLoader 启动与管理工具。': 'Launch and manage tModLoader on Android.',
   界面框架设计稿: 'UI Prototype',
   诊断日志: 'Diagnostic Logs',
-  '启动失败时查看并导出日志。': 'View and export logs if the game fails to launch.',
+  '查看并分享最近的游戏运行日志。': 'View and share recent game logs.',
+  分享游戏运行诊断包: 'Share game diagnostics ZIP',
   查看日志: 'View logs',
   开源与许可: 'Open Source & Licenses',
   '依赖、项目来源及授权信息。': 'View dependencies, project sources, and licensing information.',
@@ -106,8 +215,6 @@ const settings: Record<string, string> = {
   始终启用: 'Always Enabled',
   '选择 SDL2/FNA3D 图形后端。': 'Choose the SDL2/FNA3D graphics backend.',
   渲染器: 'Renderer',
-  '降低渲染负担，触摸坐标随画面同步；下次启动生效。':
-    'Reduce rendering load while keeping touch input aligned with the display. Applies on next launch.',
   '每行一个参数，在下一次启动生效。': 'Enter one argument per line. Applies on next launch.',
   '随启动器加载的游戏补丁，提供双摇杆、触屏背包、菜单与地图。':
     'The launcher loads this game patch to provide dual joysticks and touch controls for the inventory, menus, and map.',

@@ -43,9 +43,16 @@ internal static class MobileControlArtwork
 	internal static bool DrawButton(SpriteBatch batch, MobileControlAction action, Vector2 center,
 		float radius, Color color, bool highlighted = false, Item itemOverride = null, string textureName = null)
 	{
+		if (action == MobileControlAction.TogglePointerMode) {
+			NativeControlTheme.Legacy(batch, highlighted ? "PhonePressedCircle" : "PhoneTealCircle",
+				center, radius * 2f, highlighted ? Color.White : color);
+			DrawPointerModeIcon(batch, center, radius * 1.35f,
+				MobileTrackpad.Enabled ? new Color(244, 218, 106) * (color.A / 255f) : color);
+			return true;
+		}
 		string defaultTexture = MobileJoystickLayout.GetDefaultTexture(action);
 		bool custom = !UsesDefaultTexture(textureName, defaultTexture) && textureName != "HeldItem";
-		ControlTextureEntry entry = custom ? ControlTexturePackSystem.FindTexture(textureName) : null;
+		ControlTextureEntry entry = custom ? DefaultControlTextures.FindTexture(textureName) : null;
 		bool gamePotionArtwork = action is MobileControlAction.Heal or MobileControlAction.Mana
 			or MobileControlAction.Buff or MobileControlAction.QuickPotions;
 		if (action == MobileControlAction.QuickPotions) {
@@ -55,13 +62,13 @@ internal static class MobileControlArtwork
 		// A chosen complete sprite owns the button. Surface selections replace only
 		// its base, keeping the live item or action glyph above it.
 		if (!gamePotionArtwork && entry != null && entry.Category != "surface"
-			&& ControlTexturePackSystem.TryDraw(batch, textureName, center, radius * 2f, color)) return true;
+			&& DefaultControlTextures.TryDraw(batch, textureName, center, radius * 2f, color)) return true;
 		string background = entry?.Category == "surface" ? textureName : GetButtonBackground(action);
 		if (background == null) {
 			NativeControlTheme.Legacy(batch, defaultTexture, center, radius * 2f, highlighted ? Color.White : color);
 			return true;
 		}
-		if (entry?.Category != "surface" || !ControlTexturePackSystem.TryDraw(batch, background, center, radius * 2f, highlighted ? Color.White : color))
+		if (entry?.Category != "surface" || !DefaultControlTextures.TryDraw(batch, background, center, radius * 2f, highlighted ? Color.White : color))
 			NativeControlTheme.Legacy(batch, highlighted && entry == null ? "PhonePressedCircle" : background,
 				center, radius * 2f, highlighted ? Color.White : color);
 		Item item = itemOverride ?? GetActionItem(action);
@@ -110,13 +117,13 @@ internal static class MobileControlArtwork
 	internal static bool UsesDefaultTexture(string selected, string defaultTexture)
 	{
 		if (string.IsNullOrWhiteSpace(selected) || selected == defaultTexture) return true;
-		ControlTextureEntry entry = ControlTexturePackSystem.FindTexture(selected);
-		return entry != null && entry.Id == ControlTexturePackSystem.FindTexture(defaultTexture)?.Id;
+		ControlTextureEntry entry = DefaultControlTextures.FindTexture(selected);
+		return entry != null && entry.Id == DefaultControlTextures.FindTexture(defaultTexture)?.Id;
 	}
 
 	internal static string GetButtonBackground(MobileControlAction action) => action switch {
 		MobileControlAction.Jump or MobileControlAction.AimModeToggle or MobileControlAction.TargetLockToggle
-			or MobileControlAction.SmartCursor or MobileControlAction.ToggleGameControls => "PhoneTealCircle",
+			or MobileControlAction.SmartCursor or MobileControlAction.ToggleGameControls or MobileControlAction.PerformanceDisplay or MobileControlAction.ShowKeyboard => "PhoneTealCircle",
 		MobileControlAction.Grapple or MobileControlAction.Mount or MobileControlAction.QuickMount => "PhoneGreenCircle",
 		MobileControlAction.Interact or MobileControlAction.UseItem or MobileControlAction.Heal
 			or MobileControlAction.Mana or MobileControlAction.Buff or MobileControlAction.Unbound
@@ -158,11 +165,35 @@ internal static class MobileControlArtwork
 
 	internal static bool DrawActionIcon(SpriteBatch batch, MobileControlAction action, Vector2 center, float size, Color color)
 	{
+		if (action == MobileControlAction.ShowKeyboard) {
+			var pixel = TextureAssets.MagicPixel.Value;
+			int unit = Math.Max(1, (int)(size / 12f));
+			int x = (int)center.X - 5 * unit, y = (int)center.Y - 3 * unit;
+			for (int row = 0; row < 2; row++)
+				for (int col = 0; col < 4; col++)
+					batch.Draw(pixel, new Rectangle(x + col * 3 * unit, y + row * 3 * unit, 2 * unit, 2 * unit), color);
+			batch.Draw(pixel, new Rectangle(x + 2 * unit, y + 6 * unit, 7 * unit, unit), color);
+			return true;
+		}
+		if (action == MobileControlAction.PerformanceDisplay) {
+			float unit = size / 12f;
+			Texture2D pixel = TextureAssets.MagicPixel.Value;
+			for (int i = 0; i < 3; i++) {
+				int height = Math.Max(1, (int)((4 + i * 2) * unit));
+				batch.Draw(pixel, new Rectangle((int)(center.X + (i * 3 - 4) * unit),
+					(int)(center.Y + 4 * unit) - height, Math.Max(1, (int)(2 * unit)), height), color);
+			}
+			return true;
+		}
+		if (action == MobileControlAction.TogglePointerMode) {
+			DrawPointerModeIcon(batch, center, size, color);
+			return true;
+		}
 		if (action is MobileControlAction.Heal or MobileControlAction.Mana or MobileControlAction.Buff) {
 			DrawPotionItemIcon(batch, action, center, size, color);
 			return true;
 		}
-		if (ControlTexturePackSystem.TryDrawDefault(batch, GetActionGlyph(action), center, size, color)) return true;
+		if (DefaultControlTextures.TryDrawDefault(batch, GetActionGlyph(action), center, size, color)) return true;
 		int item = action switch {
 			MobileControlAction.Heal => ItemID.LesserHealingPotion,
 			MobileControlAction.Mana => ItemID.LesserManaPotion,
@@ -183,6 +214,34 @@ internal static class MobileControlArtwork
 			return true;
 		}
 		return false;
+	}
+
+	private static void DrawPointerModeIcon(SpriteBatch batch, Vector2 center, float size, Color color)
+	{
+		float scale = size / 20f;
+		var pixel = TextureAssets.MagicPixel.Value;
+		void Line(float x, float y, float endX, float endY)
+		{
+			Vector2 start = center + new Vector2(x, y) * scale;
+			Vector2 delta = new(endX - x, endY - y);
+			batch.Draw(pixel, start, new Rectangle(0, 0, 1, 1), color, delta.ToRotation(), new Vector2(0, .5f),
+				new Vector2(delta.Length() * scale + 1f, Math.Max(1f, 1.7f * scale)), SpriteEffects.None, 0f);
+		}
+		if (MobileTrackpad.Enabled) {
+			Line(-6, -8, -6, 7);
+			Line(-6, -8, 7, 2);
+			Line(7, 2, -1, 2);
+			Line(-1, 2, -6, 7);
+			Line(-1, 2, 2, 8);
+		}
+		else {
+			Line(-7, -7, 7, -7);
+			Line(7, -7, 7, 7);
+			Line(7, 7, -7, 7);
+			Line(-7, 7, -7, -7);
+			Line(-2, 0, 2, 0);
+			Line(0, -2, 0, 2);
+		}
 	}
 
 	internal static void DrawRadialFrame(SpriteBatch batch, Vector2 center, float radius, Color color)

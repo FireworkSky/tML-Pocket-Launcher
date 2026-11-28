@@ -14,10 +14,15 @@ set(LIBS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../external")
 set(DOTNETHOST_DIR "${CMAKE_CURRENT_SOURCE_DIR}/dotnethost")
 
 include(FetchContent)
+find_package(Git REQUIRED)
+# Backport libsdl-org/SDL#13016 with the property names consumed by FNA3D.
+set(SDL_VULKAN_PATCH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/sdl-vulkan-optional-features.patch")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${SDL_VULKAN_PATCH}")
 FetchContent_Declare(
     SDL3
     URL https://codeload.github.com/RotatingArtDev/SDL/zip/8cddfc209463f76072304c0425024fed47c69361
     URL_HASH SHA256=0eb11d4e57e48d4fdf595849f80b5a669369e3c1c6f1235546c67cc366f734db
+    PATCH_COMMAND "${GIT_EXECUTABLE}" --git-dir=.unused-git-dir apply --ignore-space-change "${SDL_VULKAN_PATCH}"
 )
 if(DEFINED ENV{TML_SDL3_SOURCE_DIR} AND NOT "$ENV{TML_SDL3_SOURCE_DIR}" STREQUAL "")
     if(NOT EXISTS "$ENV{TML_SDL3_SOURCE_DIR}/CMakeLists.txt")
@@ -66,6 +71,11 @@ set(SDL3_LIBRARIES SDL3-shared)
 include(cmake/Sdl2CompatOptions.cmake)
 include(cmake/FaudioOptions.cmake)
 include(cmake/Fna3dOptions.cmake)
+
+# Keep debug symbols while benchmarking the graphics stack at release optimization.
+foreach(graphics_target SDL3-shared SDL2 FNA3D mojoshader)
+    target_compile_options(${graphics_target} PRIVATE "$<$<CONFIG:Debug>:-O2>")
+endforeach()
 
 add_subdirectory("${DOTNETHOST_DIR}" "${CMAKE_BINARY_DIR}/dotnethost")
 

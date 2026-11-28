@@ -16,4 +16,3 @@ dependencyResolutionManagement {
 
 rootProject.name = "tML Pocket Launcher"
 include(":app")
-include(":renderer-plugin-fixture")

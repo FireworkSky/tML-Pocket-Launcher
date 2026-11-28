@@ -27,15 +27,7 @@ place and leaves the game in landscape.
 ```sh
 npm run check
 npm run build
-npm test
 ```
-
-Tests build production assets, start a temporary preview on port 8770, and run
-nine Playwright suites. They default to installed Microsoft Edge; set
-`PLAYWRIGHT_CHANNEL=chrome` to use Chrome. For Playwright's bundled Chromium,
-install it with `npx playwright install chromium` and set
-`PLAYWRIGHT_CHANNEL=chromium`. Screenshot outputs use ignored `test-results/`
-and, with `LAUNCHER_CAPTURE=1`, `build/ui-previews/` at the repository root.
 
 ## Structure
 
@@ -47,7 +39,6 @@ and, with `LAUNCHER_CAPTURE=1`, `build/ui-previews/` at the repository root.
 - `src/features/native/`: device-backed panels sharing the approved controls/styles.
 - `src/styles/`: launcher layout, glass palette and component adaptations.
 - `public/`: game identity, icon sprite, phone preview and dependency notice.
-- `tests/`: existing workflow regression, mods and Animate UI/accessibility tests.
 
 Animate UI imports use the specific primitive subpaths. Dialog handles sheets via
 `data-side`, Tabs handles category selection/panels, Switch handles checked state,

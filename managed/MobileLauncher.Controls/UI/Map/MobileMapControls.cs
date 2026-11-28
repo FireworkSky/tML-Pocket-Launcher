@@ -12,7 +12,6 @@ internal static partial class MobileJoystickInput
 {
 	private const int MapLongPressMilliseconds = 500;
 	private const float MapClickSlopSquared = 12 * 12;
-	private static double lastZoomTime;
 	private static int mapContact = int.MinValue;
 	private static Vector2 mapLastPosition, mapStartPosition;
 	private static long mapPressStarted;
@@ -35,28 +34,18 @@ internal static partial class MobileJoystickInput
 
 	internal static MobileControlLayout CreateMapLayout(MobileJoystickConfig config)
 	{
-		var normal = MobileJoystickLayout.CreateControlsLayout(config, Main.screenWidth, Main.screenHeight);
-		var buttons = new List<MobileControlButton>();
+		float scale = MobileJoystickLayout.GetControlScale(config);
+		var buttons = new MobileControlButton[3];
 		for (int i = 0; i < 3; i++) {
 			Rectangle r = MobileJoystickLayout.GetToolbarButton(config, i, Main.screenWidth, Main.screenHeight);
-			buttons.Add(new(i == 0 ? MobileControlAction.Chat : i == 1 ? MobileControlAction.MapStyle : MobileControlAction.Map,
-				i == 0 ? "Chat" : i == 1 ? "MapStyle" : "Map", r.Center.ToVector2(), r.Width * .5f));
+			buttons[i] = new(i == 0 ? MobileControlAction.Chat : i == 1 ? MobileControlAction.MapStyle : MobileControlAction.Map,
+				i == 0 ? "Chat" : i == 1 ? "MapStyle" : "Map", r.Center.ToVector2(), r.Width * .5f);
 		}
-		bool minus = false, plus = false;
-		foreach (var button in normal.Buttons) {
-			if (button.Action == MobileControlAction.ZoomIn) { buttons.Add(button); plus = true; }
-			if (button.Action == MobileControlAction.ZoomOut) { buttons.Add(button); minus = true; }
-		}
-		float scale = normal.Scale;
-		float y = Main.screenHeight - 42 * scale;
-		if (!minus) buttons.Add(new(MobileControlAction.ZoomOut, "ZoomOut", new(Main.screenWidth * .295f, y), 16 * scale));
-		if (!plus) buttons.Add(new(MobileControlAction.ZoomIn, "ZoomIn", new(Main.screenWidth * .705f, y), 16 * scale));
-		return new(Vector2.Zero, 0, Vector2.Zero, 0, buttons.ToArray(), scale);
+		return new(Vector2.Zero, 0, Vector2.Zero, 0, buttons, scale);
 	}
 
 	private static void ResetMapInteraction()
 	{
-		lastZoomTime = 0;
 		ResetFullscreenMapGesture();
 		ResetScreenPinch();
 	}
@@ -69,11 +58,12 @@ internal static partial class MobileJoystickInput
 
 	private static bool UpdateScreenPinch(MobileJoystickConfig config)
 	{
+		IReadOnlyList<MobileTouchContact> touches = MobileTrackpad.Enabled ? MobileTrackpad.PinchContacts : Contacts;
 		bool enabled = config?.EnablePinchZoom == true && !Main.mapFullscreen && !Main.playerInventory
 			&& !MobileChatSystem.IsOpen && Main.LocalPlayer.talkNPC < 0;
 		if (screenPinchFirst != int.MinValue) {
 			MobileTouchContact? first = null, second = null;
-			foreach (MobileTouchContact contact in Contacts) {
+			foreach (MobileTouchContact contact in touches) {
 				if (contact.Id == screenPinchFirst && !contact.IsReleased) first = contact;
 				if (contact.Id == screenPinchSecond && !contact.IsReleased) second = contact;
 			}
@@ -89,12 +79,12 @@ internal static partial class MobileJoystickInput
 			if (!hasActiveFinger) ResetScreenPinch();
 			return consumed;
 		}
-		if (!enabled || Contacts.Count < 2) return false;
+		if (!enabled || touches.Count < 2) return false;
 		MobileTouchContact? firstContact = null, secondContact = null;
 		MobileHotbarLayout hotbar = MobileJoystickLayout.CreateHotbarLayout(config);
 		Rectangle minimap = Main.mapStyle == 1 ? MobileJoystickLayout.GetMinimapBounds(config,
 			PlayerInput.RealScreenWidth, PlayerInput.RealScreenHeight) : Rectangle.Empty;
-		foreach (MobileTouchContact contact in Contacts) {
+		foreach (MobileTouchContact contact in touches) {
 			Point point = contact.Position.ToPoint();
 			if (contact.Id < 0 || contact.IsReleased || IsRadialContact(contact.Id) || minimap.Contains(point)
 				|| MobileInventorySystem.OwnsContact(contact.Id) || MobileInventorySystem.BlocksControl(contact.Position)
@@ -122,20 +112,11 @@ internal static partial class MobileJoystickInput
 	}
 	private static void UpdateHeldZoom()
 	{
-		double now = Stopwatch.GetTimestamp() / (double)Stopwatch.Frequency;
-		float elapsed = lastZoomTime == 0 ? 1f / 60 : (float)Math.Clamp(now - lastZoomTime, 0, .05);
-		lastZoomTime = now;
+		if (Main.mapFullscreen) return;
 		int direction = (IsActionDown(MobileControlAction.ZoomIn) ? 1 : 0) - (IsActionDown(MobileControlAction.ZoomOut) ? 1 : 0);
-		if (direction == 0) return;
-		if (Main.mapFullscreen) {
-			float minimum = Main.screenWidth / (float)Math.Max(1, Main.maxTilesX) * .599f;
-			Main.mapFullscreenScale = MathHelper.Clamp(Main.mapFullscreenScale * MathF.Pow(2, direction * elapsed), minimum, 31.18f);
-		}
-		else {
-			// Let Terraria and zoom mods apply their own speed and bounds.
-			Terraria.GameInput.PlayerInput.Triggers.Current.ViewZoomIn |= direction > 0;
-			Terraria.GameInput.PlayerInput.Triggers.Current.ViewZoomOut |= direction < 0;
-		}
+		// Let Terraria and zoom mods apply their own speed and bounds.
+		PlayerInput.Triggers.Current.ViewZoomIn |= direction > 0;
+		PlayerInput.Triggers.Current.ViewZoomOut |= direction < 0;
 	}
 
 	private static void UpdateFullscreenMapGesture(long timestamp)
@@ -146,7 +127,8 @@ internal static partial class MobileJoystickInput
 		if (!mapGestureWasOpen) { mapGestureWasOpen = true; mapContact = int.MinValue; return; }
 		MobileTouchContact? first = null, second = null;
 		int activeContacts = 0;
-		foreach (var contact in Contacts) {
+		IReadOnlyList<MobileTouchContact> touches = MobileTrackpad.Enabled ? MobileTrackpad.PinchContacts : Contacts;
+		foreach (var contact in touches) {
 			if (contact.IsReleased) continue;
 			activeContacts++;
 			if (TouchesMapButton(contact.Position)) continue;
@@ -169,6 +151,11 @@ internal static partial class MobileJoystickInput
 			return;
 		}
 		mapPinchDistance = 0; mapPinchFirst = mapPinchSecond = int.MinValue;
+		if (MobileTrackpad.Enabled) {
+			mapContact = int.MinValue;
+			if (MobileTrackpad.Clicked) pendingMapTap = MobileTrackpad.ScreenPosition;
+			return;
+		}
 		bool found = false;
 		foreach (var contact in Contacts) {
 			if (mapContact == int.MinValue) {

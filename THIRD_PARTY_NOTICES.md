@@ -6,6 +6,7 @@ Preserve upstream copyright, license and notice files when distributing this pro
 | --- | --- | --- |
 | SDL2 | `external/SDL`, RotatingArtDev/SDL | Android rendering/input host |
 | FNA3D | `external/FNA3D`, RotatingArtDev/FNA3D | Android graphics backend |
+| Theorafile | [FNA-XNA/Theorafile](https://github.com/FNA-XNA/Theorafile), Android arm64 [binary from RotatingartLauncher](https://github.com/FireworkSky/RotatingartLauncher/blob/c51587113615f5ff7032c954aad87aef9b7aadfa/app/src/main/jniLibs/arm64-v8a/libtheorafile.so) | FNA video decoding |
 | FAudio | `external/FAudio`, RotatingArtDev/FAudio | Android audio backend |
 | dotnethost | `android/native/dotnethost` | hostfxr adapter |
 | .NET runtime | `android/app/src/main/assets/runtime/dotnet.tar.xz`, version 10.0.4 | Android arm64 CoreCLR |

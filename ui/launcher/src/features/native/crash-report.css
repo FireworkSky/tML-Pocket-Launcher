@@ -1,0 +1,11 @@
+.crash-report {
+  margin: 0;
+  max-height: 42vh;
+  overflow: auto;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  user-select: text;
+  -webkit-user-select: text;
+}

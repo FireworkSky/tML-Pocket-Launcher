@@ -23,6 +23,7 @@ export interface NativeMod {
   enabled: boolean;
   error?: string;
   builtin?: boolean;
+  changed?: number;
 }
 export interface NativePack {
   name: string;
@@ -40,10 +41,13 @@ export interface NativePatch {
   enabled: boolean;
 }
 export interface NativePreferences extends Partial<Preferences> {
-  renderScale?: number;
+  autoBackup?: boolean;
   wifiOnly?: boolean;
   launchArguments?: string[];
   rendererPlugin?: string;
+  renderResolutionPercent?: number;
+  fixed1080p?: boolean;
+  highRefreshRate?: boolean;
 }
 export interface NativeRenderer {
   identity: string;
@@ -60,23 +64,45 @@ export interface NativeInstalledVersion {
   active: boolean;
   available: boolean;
 }
+export type TerrariaSource = 'steam' | 'gog' | 'android';
+export interface NativeInstalledTerraria {
+  source: TerrariaSource;
+  version: string;
+  active: boolean;
+  hasPeTextures: boolean;
+}
+export interface NativeInstance {
+  id: string;
+  name: string;
+  active: boolean;
+  archived?: boolean;
+  versionId?: string;
+}
 export interface NativeSnapshot {
   protocol: 1;
   systemLocale?: string;
+  releaseSource?: 'GitHub' | 'Gitee';
   busy: boolean;
+  launchBlocked?: boolean;
+  launchMessage?: string;
   message: string;
   progress: number;
   error: string | null;
   retry: boolean;
   operation: string;
+  downloadCanPause?: boolean;
   launchStage?: 'resources' | 'ownership' | 'mods' | 'handoff' | null;
   ready: boolean;
+  storageGranted?: boolean;
   runtime: boolean;
   terraria: string | null;
-  terrariaSource?: 'steam' | 'gog' | 'android' | null;
-  desktopTerrariaSource?: 'steam' | 'gog' | null;
+  packageRevision?: number;
+  terrariaSource?: TerrariaSource | null;
+  installedTerraria?: NativeInstalledTerraria[];
   tml: string | null;
   installedVersions?: NativeInstalledVersion[];
+  instances?: NativeInstance[];
+  activeInstance?: string;
   mods: NativeMod[];
   packs: NativePack[];
   patches: NativePatch[];

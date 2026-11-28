@@ -1,0 +1,117 @@
+.launcher-notice-screen {
+  display: grid;
+  place-items: center;
+  block-size: 100dvh;
+  padding: clamp(12px, 4vh, 32px) clamp(12px, 4vw, 40px);
+}
+
+.launcher-notice-card {
+  display: flex;
+  flex-direction: column;
+  inline-size: min(100%, 760px);
+  max-block-size: 100%;
+  min-block-size: 0;
+}
+
+.launcher-notice-card > header,
+.launcher-notice-card > footer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  padding: clamp(10px, 2.5vh, 20px) clamp(14px, 3vw, 30px);
+}
+
+.launcher-notice-card > header {
+  border-block-end: 1px solid var(--line);
+}
+
+.launcher-notice-card > header img {
+  object-fit: contain;
+}
+
+.launcher-notice-card h1 {
+  margin: 0;
+  color: var(--strong);
+  font-size: clamp(20px, 3vw, 27px);
+}
+
+.launcher-notice-scroll {
+  min-block-size: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-inline: clamp(14px, 3vw, 30px);
+  scrollbar-color: var(--line) transparent;
+}
+
+.launcher-notice-card > footer {
+  justify-content: flex-end;
+  border-block-start: 1px solid var(--line);
+}
+
+.launcher-notice-card > footer p {
+  flex: 1 0 100%;
+  margin: 0;
+  color: var(--warning);
+}
+
+.launcher-notice-content section {
+  padding-block: 14px;
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.launcher-notice-content section + section {
+  border-block-start: 1px solid var(--line);
+}
+
+.launcher-notice-content h3 {
+  margin: 0 0 6px;
+  color: var(--strong);
+  font-size: 16px;
+}
+
+.launcher-notice-content p,
+.launcher-notice-content ul,
+.launcher-notice-content ol {
+  margin: 0 0 8px;
+}
+
+.launcher-notice-content ul,
+.launcher-notice-content ol {
+  padding-inline-start: 1.4em;
+}
+
+.launcher-notice-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+
+.about-supporters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-wrap: anywhere;
+}
+
+.about-link,
+.launcher-notice-content a {
+  color: var(--blue);
+  text-decoration: underline;
+  text-underline-offset: 0.16em;
+}
+
+.launcher-notice-settings {
+  padding: 14px 20px;
+}
+
+.launcher-notice-settings summary {
+  cursor: pointer;
+  color: var(--strong);
+  font-weight: 600;
+}

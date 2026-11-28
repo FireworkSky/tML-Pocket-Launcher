@@ -42,7 +42,7 @@ public partial class MobileMinimapSystem : MobileSystem
 	private void DrawMap(On_Main.orig_DrawMap orig, Main self, GameTime time)
 	{
 		// IngameOptions also calls DrawMap directly, bypassing interface layers.
-		if (MobileMenuSystem.EditingCustomControls || MobileChatSystem.IsOpen) return;
+		if (MobileMenuSystem.IsPauseMenuOpen || MobileMenuSystem.EditingCustomControls || MobileChatSystem.IsOpen) return;
 		if (!UseMobileFullscreen) { orig(self, time); return; }
 		DrawFullscreenMapInput(orig, self, time);
 		if (Main.mapFullscreen) DrawFullscreenControls();
@@ -107,7 +107,7 @@ public partial class MobileMinimapSystem : MobileSystem
 
 	private void UpdateFrame(On_MinimapFrame.orig_Update orig, MinimapFrame self)
 	{
-		// Vanilla's square frame buttons are replaced by the mobile zoom buttons.
+		// The mobile minimap uses the HUD toolbar and touch gestures.
 		if (!UseMobileMap) {
 			orig(self);
 		}

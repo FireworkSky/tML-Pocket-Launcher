@@ -78,7 +78,7 @@ export function PatchesPage() {
               {state.demo ? (
                 <div className="patch-row">
                   <span className="patch-icon">
-                    <Icon name="game" />
+                    <Icon name="patch" />
                   </span>
                   <div className="row-main">
                     <h3>

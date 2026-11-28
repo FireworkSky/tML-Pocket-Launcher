@@ -30,12 +30,15 @@ import {
 import type { Page } from './domain/types';
 import { NativeHomePage, NativePatchesPage } from './features/native/pages';
 import { NativeGamesPage } from './features/native/games';
+import { ControlPackLibrary } from './features/native/control-pack-library';
 import { NativeModsPage } from './features/native/mods';
 import { SteamLoginPage } from './features/native/steam/login';
 import { SteamLibraryPage } from './features/native/steam/library';
 import { NativeDownloadsPage } from './features/native/steam/downloads';
+import { useDownloads } from './features/native/download-state';
 import { useLaunchTransition } from './features/launch/transition';
 import { NativeReleaseCatalog } from './features/native/release-catalog';
+import { CrashReportHost } from './features/native/crash-report';
 import { NativeWorkshopCatalog } from './features/native/workshop';
 import { NativePacks } from './features/native/packs';
 
@@ -47,7 +50,7 @@ const destinations: { id: Page; symbol: string }[] = [
   { id: 'settings', symbol: 'settings' },
 ];
 const help: Record<Page, string> = {
-  home: '添加 Terraria 资源和 tModLoader，检查运行环境后选择配置启动。支持导入 Steam ZIP 和 GOG Linux .sh；Steam 资源启动前需要登录并验证游戏所有权，GOG 导入无需登录。',
+  home: '添加 Terraria 资源和 tModLoader，检查运行环境后选择配置启动。支持导入 Steam ZIP 和 GOG Linux .sh；Steam 下载完成后可离线启动，导入 Steam ZIP 需在启动时验证所有权。',
   games:
     '管理 Terraria 资源、tModLoader 版本和商店账户。已安装配置从右侧版本选择器打开；下载新版本与本地导入在这里进行。',
   mods: '已安装模组支持搜索、启停、依赖联动、删除和批量操作。下载模组支持浏览、筛选、更新及连同依赖下载；模组包保存启用清单。管理时只读取文件元信息，无需加载模组。在线目录与下载在此原型中为示例。',
@@ -63,7 +66,7 @@ export function App() {
       <div
         className={`app-shell ${nativeWorkspace ? 'has-native-workspace' : ''} ${isResourceWorkspace(nativeWorkspace) ? 'resource-workspace' : ''}`}
       >
-        <Navigation />
+        {nativeWorkspace !== 'control-packs' && <Navigation />}
         <main className={`main ${nativeWorkspace ? 'native-workspace' : ''}`}>
           <Header />
           <PageContent />
@@ -71,6 +74,7 @@ export function App() {
         {!nativeWorkspace && <LaunchDock />}
       </div>
       <div id="overlay-root">
+        <CrashReportHost />
         <OverlayHost />
       </div>
       <motion.div
@@ -194,6 +198,8 @@ function Header() {
     nativeWorkspace,
     closeWorkspace,
   } = useGameActions();
+  const { activeCount } = useDownloads();
+  const downloadCount = nativeMode ? activeCount : Number(Boolean(state.task));
   const resource = isResourceWorkspace(nativeWorkspace);
   const pageTitle = t(nativeWorkspace ? workspaceNames[nativeWorkspace] : pageNames[state.page]);
   const helpTitle = t('{page}使用说明', { page: t(pageNames[state.page]) });
@@ -206,7 +212,7 @@ function Header() {
           ? state.modTab === 'packs'
             ? { label: '导入 JSON', action: 'import-pack', run: () => importInfo('pack') }
             : { label: '添加模组', action: 'add-mod', run: addMods }
-          : { label: '导入模组', action: 'import-mod', run: () => importInfo('mod') }
+          : { label: '导入游戏模组', action: 'import-mod', run: () => importInfo('mod') }
         : state.page === 'patches'
           ? { label: '导入补丁', action: 'import-patch', run: () => importInfo('patch') }
           : null;
@@ -228,11 +234,11 @@ function Header() {
           className="tml-wordmark"
           src="/tml-pocket-wordmark.svg"
           alt=""
-          width="160"
+          width="181"
           height="28"
         />
       )}
-      <div className="topbar-actions">
+      {nativeWorkspace !== 'control-packs' && <div className="topbar-actions">
         <span id="screen-action">
           {primary && (
             <Button
@@ -258,7 +264,7 @@ function Header() {
                 nativeMode
                   ? state.page === 'mods'
                     ? t(
-                        '导入和管理 .tmod 元信息、启用清单与模组包。创意工坊部分文件需要 Steam 客户端获取后导入。',
+                        '导入游戏模组，查看模组信息，管理启用清单与模组包。创意工坊部分文件需要 Steam 客户端获取后导入。',
                       )
                     : state.page === 'games'
                       ? t(
@@ -274,14 +280,23 @@ function Header() {
         {((!nativeWorkspace && (!nativeMode || state.page !== 'games')) || resource) && (
           <Button
             className="icon-button portrait-account"
-            aria-label={t('管理 Steam 和 GOG 账户')}
+            aria-label={t(
+              nativeMode && !resource ? '管理 Terraria 资源' : '管理 Steam 和 GOG 账户',
+            )}
             data-action="accounts"
             onClick={() => {
-              update((current) => ({ ...current, gameTab: nativeMode ? 'sources' : 'accounts' }));
+              update((current) => ({
+                ...current,
+                gameTab: nativeMode
+                  ? !resource && nativeState?.terrariaSource
+                    ? 'installed'
+                    : 'sources'
+                  : 'accounts',
+              }));
               navigate('games');
             }}
           >
-            <Icon name="user" />
+            <Icon name={nativeMode && !resource ? 'game' : 'user'} />
           </Button>
         )}
         <Button
@@ -292,8 +307,8 @@ function Header() {
         >
           <Icon name="download" />
           {resource && <span>{t('下载')}</span>}
-          <span id="task-badge" hidden={nativeMode ? !nativeState?.busy : !state.task}>
-            1
+          <span id="task-badge" hidden={downloadCount === 0}>
+            {downloadCount}
           </span>
         </Button>
         {resource && (
@@ -303,7 +318,7 @@ function Header() {
             onClick={() => navigate('settings')}
           />
         )}
-      </div>
+      </div>}
     </header>
   );
 }
@@ -372,6 +387,8 @@ function PageContent() {
             <SteamLibraryPage />
           ) : nativeWorkspace === 'downloads' ? (
             <NativeDownloadsPage />
+          ) : nativeWorkspace === 'control-packs' ? (
+            <ControlPackLibrary />
           ) : nativeWorkspace === 'resource-versions' ? (
             <NativeReleaseCatalog />
           ) : nativeWorkspace === 'resource-mods' ? (
@@ -391,12 +408,22 @@ function PageContent() {
 function LaunchDock() {
   const { t } = useTranslation();
   const launchTransition = useLaunchTransition();
-  const { state, navigate, update, instances, notice, showInfo, nativeMode, nativeState } =
+  const { state, navigate, update, instances, notice, showInfo, nativeMode, nativeState, openWorkspace } =
     useGameActions();
   const ready = nativeMode ? nativeState?.ready === true : state.demo;
+  const activeInstance = nativeState?.instances?.find((instance) => instance.active);
+  const instanceName =
+    activeInstance?.id === 'default' && activeInstance.name === '默认实例'
+      ? t('默认实例')
+      : activeInstance?.name;
   const compact = nativeMode && state.page === 'games';
-  const accounts = () => {
-    update((current) => ({ ...current, gameTab: nativeMode ? 'sources' : 'accounts' }));
+  const source = nativeState?.terrariaSource;
+  const sourceName = source === 'android' ? 'Terraria PE' : source === 'gog' ? 'GOG' : 'Steam';
+  const openGameSources = () => {
+    update((current) => ({
+      ...current,
+      gameTab: nativeMode ? (source ? 'installed' : 'sources') : 'accounts',
+    }));
     navigate('games');
   };
   return (
@@ -405,13 +432,23 @@ function LaunchDock() {
       aria-label={t('当前游戏与启动操作')}
     >
       {!compact && (
-        <Button className="dock-account" data-action="accounts" onClick={accounts}>
+        <Button className="dock-account" data-action="accounts" onClick={openGameSources}>
           <span className="dock-avatar">
-            <Icon name="user" />
+            {nativeMode ? (
+              <img src="/terraria.png" alt="" width={26} height={26} />
+            ) : (
+              <Icon name="user" />
+            )}
           </span>
           <span>
-            <strong>{nativeMode ? t('正版资源来源') : t('未连接账户')}</strong>
-            <small>Steam / GOG</small>
+            <strong>{t(nativeMode ? 'Terraria 资源' : '未连接账户')}</strong>
+            <small>
+              {nativeMode
+                ? source
+                  ? [sourceName, nativeState?.terraria].filter(Boolean).join(' · ')
+                  : t('添加游戏资源')
+                : 'Steam / GOG'}
+            </small>
           </span>
           <Icon name="chevron" />
         </Button>
@@ -430,16 +467,14 @@ function LaunchDock() {
           <span>
             <small>
               {nativeMode
-                ? nativeState?.tml
-                  ? t('已安装')
-                  : t('尚未安装')
+                ? nativeState?.tml || t('尚未安装')
                 : state.demo
                   ? t('已安装 · 示例配置')
                   : t('尚未安装')}
             </small>
             <strong>
               {nativeMode
-                ? nativeState?.tml || t('选择版本')
+                ? instanceName || t('游戏实例')
                 : state.demo
                   ? t(profileTitle(state.profile))
                   : t('选择版本')}
@@ -451,21 +486,28 @@ function LaunchDock() {
           <RippleButton
             type="button"
             className="launch-button"
-            disabled={launchTransition.active || (nativeMode && nativeState?.busy)}
-            data-action={ready ? 'launch' : 'prepare'}
-            onClick={(event) =>
-              nativeMode && ready
-                ? launchTransition.start(event.currentTarget)
-                : state.demo
-                  ? notice(
-                      t('游戏启动流程'),
-                      t('准备运行环境 → 应用兼容配置 → 加载游戏 → 显示游戏画面。'),
-                      <div className="info-strip dialog-spaced">
-                        {t('当前是框架原型；这里展示启动入口，未启动真实游戏。')}
-                      </div>,
-                    )
-                  : navigate('games')
+            disabled={
+              launchTransition.active ||
+              (nativeMode && (!nativeState || (nativeState.launchBlocked ?? nativeState.busy)))
             }
+            data-action={ready ? 'launch' : 'prepare'}
+            onClick={(event) => {
+              if (nativeMode) {
+                if (ready) launchTransition.start(event.currentTarget);
+                else if (!nativeState?.tml) openWorkspace('resource-versions');
+                else openGameSources();
+              } else if (state.demo) {
+                notice(
+                  t('游戏启动流程'),
+                  t('准备运行环境 → 应用兼容配置 → 加载游戏 → 显示游戏画面。'),
+                  <div className="info-strip dialog-spaced">
+                    {t('当前是框架原型；这里展示启动入口，未启动真实游戏。')}
+                  </div>,
+                );
+              } else {
+                navigate('games');
+              }
+            }}
           >
             <Icon name="play" />
             <span>{ready ? t('启动游戏') : t('准备游戏')}</span>

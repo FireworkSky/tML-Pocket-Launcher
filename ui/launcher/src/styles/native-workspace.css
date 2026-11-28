@@ -47,6 +47,18 @@
   min-width: 0;
   padding: 12px;
 }
+.version-selector {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+.version-list > .version-selector {
+  margin-bottom: 0;
+}
 .version-hint {
   margin: 0 0 12px;
   color: var(--muted);
@@ -146,6 +158,13 @@
   min-height: 44px;
   padding-inline: 12px;
 }
+.native-mod-tools [data-action='mod-sort'] {
+  min-height: 44px;
+  width: 132px;
+}
+.native-mod-list .resource-copy > p {
+  overflow-wrap: anywhere;
+}
 .native-mod-tools > .icon-button {
   flex: 0 0 44px;
   width: 44px;
@@ -244,7 +263,11 @@
   }
   .native-mod-tools .filter-group {
     order: 2;
-    width: 100%;
+    flex: 1 0 auto;
+  }
+  .native-mod-tools [data-action='mod-sort'] {
+    order: 3;
+    flex: 1 0 125px;
   }
   .native-mod-tools .filter {
     flex: 1;
@@ -269,15 +292,9 @@
 .native-store-form .native-field {
   flex: initial;
 }
-.native-field select {
+.native-field .select-trigger {
   width: 100%;
-  min-height: 48px;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--panel);
-  color: var(--text);
-  font: inherit;
+  min-width: 0;
 }
 .native-store-error {
   color: var(--danger, #ef9a9a);

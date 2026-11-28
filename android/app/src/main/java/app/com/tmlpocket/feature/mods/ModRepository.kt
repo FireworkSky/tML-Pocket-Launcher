@@ -5,6 +5,7 @@ import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import org.json.JSONArray
 import org.json.JSONObject
+import org.json.JSONTokener
 
 class ModRepository(private val userData: File) {
     private val root = File(userData, "Mods")
@@ -14,12 +15,14 @@ class ModRepository(private val userData: File) {
     fun icons(ids: List<String>): JSONObject {
         require(ids.size in 1..30) { "一次最多读取 30 个模组图标" }
         val result = JSONObject()
-        ids.distinct().forEach { id ->
-            require(id.matches(Regex("[A-Za-z_][A-Za-z0-9_]{0,127}"))) { "无效模组名称" }
-            val file = File(root, "$id.tmod")
-            if (file.isFile && !Files.isSymbolicLink(file.toPath())) {
-                runCatching { TmodReader.readIcon(file) }.getOrNull()?.let { result.put(id, it) }
-            }
+        val pending = ids.toMutableSet()
+        require(pending.all(modInternalName::matches)) { "无效模组名称" }
+        for (file in root.listFiles().orEmpty().sortedBy { it.name }) {
+            if (pending.isEmpty()) break
+            if (file.extension != "tmod" || Files.isSymbolicLink(file.toPath()) || !file.isFile) continue
+            val (id, icon) = runCatching { TmodReader.readIcon(file, pending) }.getOrNull() ?: continue
+            result.put(id, icon)
+            pending.remove(id)
         }
         return result
     }
@@ -40,6 +43,7 @@ class ModRepository(private val userData: File) {
                     result.put(
                         meta
                             .json(meta.name in enabled)
+                            .put("changed", file.lastModified())
                             .put("dependencies", dependencyStatus(meta, installed, enabled))
                     )
                 },
@@ -48,6 +52,8 @@ class ModRepository(private val userData: File) {
                         JSONObject()
                             .put("id", file.nameWithoutExtension)
                             .put("title", file.name)
+                            .put("size", file.length())
+                            .put("changed", file.lastModified())
                             .put("error", failure.message)
                             .put("enabled", false)
                             .put("deps", JSONArray())
@@ -94,9 +100,23 @@ class ModRepository(private val userData: File) {
         val meta = TmodReader.read(file, verifyHash = true)
         require(meta.name != LegacyTouchMod.ID) { "MobileJoystick 已作为启动器游戏补丁提供" }
         check(root.isDirectory || root.mkdirs()) { "无法创建模组目录" }
-        val destination = File(root, "${meta.name}.tmod")
+        val canonical = File(root, "${meta.name}.tmod")
+        val existing = root.listFiles().orEmpty().filter { candidate ->
+            candidate.isFile && candidate.extension == "tmod" && !Files.isSymbolicLink(candidate.toPath()) &&
+                runCatching { TmodReader.read(candidate).name }.getOrNull() == meta.name
+        }
+        require(existing.size <= 1) { "发现多份同名模组 ${meta.name}，请保留一份后重新导入" }
+        val destination = existing.singleOrNull() ?: canonical
         require(!Files.isSymbolicLink(destination.toPath())) { "模组目标不能是符号链接" }
-        Files.move(file.toPath(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        if (existing.isEmpty() && destination.isFile) {
+            require(runCatching { TmodReader.read(destination) }.isFailure) { "目标文件名已被其他模组占用：${destination.name}" }
+        }
+        Files.move(file.toPath(), destination.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+    }
+
+    fun createImportTemp(): File {
+        check(userData.isDirectory || userData.mkdirs()) { "无法创建模组暂存目录" }
+        return File.createTempFile(".mod-import-", ".tmp", userData)
     }
 
     fun setEnabled(ids: Set<String>, value: Boolean, replace: Boolean = false) {
@@ -141,7 +161,7 @@ class ModRepository(private val userData: File) {
     }
 
     fun delete(id: String) {
-        require(id.matches(Regex("[A-Za-z_][A-Za-z0-9_]{0,127}"))) { "无效模组名称" }
+        require(id.matches(modInternalName)) { "无效模组名称" }
         if (id in metadata()) setEnabled(setOf(id), false)
         // Metadata name, rather than a user-supplied path, selects the file.
         root
@@ -159,9 +179,33 @@ class ModRepository(private val userData: File) {
 
     fun packs(): JSONArray = if (packsFile.isFile) JSONArray(packsFile.readText()) else JSONArray()
 
+    fun importPack(file: File, defaultName: String) {
+        val bytes = file.readBytes()
+        val charset = when {
+            bytes.size >= 2 && bytes[0] == 0xff.toByte() && bytes[1] == 0xfe.toByte() -> Charsets.UTF_16LE
+            bytes.size >= 2 && bytes[0] == 0xfe.toByte() && bytes[1] == 0xff.toByte() -> Charsets.UTF_16BE
+            else -> Charsets.UTF_8
+        }
+        val reader = JSONTokener(String(bytes, charset).removePrefix("\uFEFF"))
+        val value = reader.nextValue()
+        require(reader.nextClean() == '\u0000') { "模组包 JSON 末尾含有多余内容" }
+        val (name, list) = when (value) {
+            is JSONArray -> defaultName to value
+            is JSONObject -> {
+                val name = value.opt("name") as? String ?: error("模组包缺少名称")
+                name to (value.optJSONArray("mods") ?: error("模组包缺少 mods 清单"))
+            }
+            else -> error("请选择包含模组清单的 JSON 文件")
+        }
+        val ids = (0 until list.length()).map { index ->
+            list.get(index) as? String ?: error("模组清单第 ${index + 1} 项应为模组内部名称")
+        }
+        savePack(name, ids)
+    }
+
     fun savePack(name: String, ids: List<String> = enabled().sorted()): JSONObject {
         require(name.trim().isNotEmpty() && name.length <= 80 && ids.size <= 4096) { "模组包名称或清单无效" }
-        require(ids.all { it.matches(Regex("[A-Za-z_][A-Za-z0-9_]{0,127}")) }) { "无效模组名称" }
+        require(ids.all(modInternalName::matches)) { "无效模组名称" }
         val array = packs()
         val pack = JSONObject().put("name", name.trim()).put("mods", JSONArray(ids.distinct()))
         val result = JSONArray()
@@ -208,12 +252,8 @@ class ModRepository(private val userData: File) {
         val mods = metadata()
         val active = enabled()
         require(active.all { it in mods }) { "启用清单包含缺失或损坏的模组" }
-        val target = version.removePrefix("v").split('.').take(2).map { it.toIntOrNull() }
         active.forEach { id ->
-            require(
-                mods.getValue(id).loaderVersion.split('.').take(2).map { it.toIntOrNull() } ==
-                    target
-            ) {
+            require(TmlModCompatibility.accepts(mods.getValue(id).loaderVersion, version)) {
                 "模组 $id 的 tML 版本为 ${mods.getValue(id).loaderVersion}，当前发行版为 $version"
             }
         }

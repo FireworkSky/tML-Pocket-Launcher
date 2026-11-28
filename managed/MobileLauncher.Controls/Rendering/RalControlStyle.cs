@@ -32,7 +32,7 @@ internal static class RalControlStyle
 		Vector2 p = (uv - new Vector2(.5f)) * dimensions;
 		float radius = Math.Min(dimensions.X, dimensions.Y) / 2;
 		string type = data.Value<string>("type"), shape = data.Value<string>("shape");
-		if (type is "joystick" or "radialmenu" || shape == "CIRCLE" || type == "dpad" && data.Value<string>("style") == "ROUND") return p.Length() - radius;
+		if (type is "joystick" or "radialmenu" || shape == "CIRCLE") return p.Length() - radius;
 		if (shape == "POLYGON" && data["polygonPoints"] is JArray points && points.Count >= 3) {
 			float distance = float.MaxValue; bool inside = false;
 			for (int i = 0, j = points.Count - 1; i < points.Count; j = i++) {
@@ -46,10 +46,6 @@ internal static class RalControlStyle
 			}
 			return inside ? -distance : distance;
 		}
-		if (type == "dpad" && data.Value<string>("style") == "CROSS") {
-			float half = (data.Value<float?>("buttonSize") ?? .35f) / 2;
-			return Math.Min(Box(p, new Vector2(dimensions.X * half, dimensions.Y / 2), 0), Box(p, new Vector2(dimensions.X / 2, dimensions.Y * half), 0));
-		}
 		return Box(p, dimensions / 2, Math.Min(data.Value<float?>("cornerRadius") ?? 8, radius));
 	}
 	private static float Box(Vector2 p, Vector2 half, float radius)
@@ -57,7 +53,7 @@ internal static class RalControlStyle
 		Vector2 q = new Vector2(Math.Abs(p.X), Math.Abs(p.Y)) - half + new Vector2(radius);
 		return Vector2.Max(q, Vector2.Zero).Length() + Math.Min(Math.Max(q.X, q.Y), 0) - radius;
 	}
-	internal static Color Sample(JObject data, Vector2 uv, Vector2 dimensions, float footprint, bool pressed = false, bool borderOnly = false)
+	internal static Color Sample(JObject data, Vector2 uv, Vector2 dimensions, float footprint, bool pressed = false)
 	{
 		float distance = Distance(data, uv, dimensions);
 		float coverage = Coverage(distance, footprint);
@@ -75,7 +71,7 @@ internal static class RalControlStyle
 			borderOpacity = joystick ? opacity * .3f : borderOpacity * .6f;
 		}
 		if (joystick) { opacity *= .8f; multiplier = 1; }
-		Color fill = borderOnly ? Color.Transparent : Paint(background, opacity * multiplier) * coverage;
+		Color fill = Paint(background, opacity * multiplier) * coverage;
 		float border = width <= 0 ? 0 : Math.Min(coverage, Coverage(-distance - width, footprint));
 		return Over(Paint(stroke, borderOpacity * multiplier) * border, fill);
 	}

@@ -565,13 +565,8 @@ UI: {
 	PlaceGuideQueryItem: Place an item in the Guide slot to see recipes that use it.
 	SwitchToCrafting: Query → Craft
 	SwitchToGuideQuery: Craft → Guide query
-	RalDefaultAppearance: RAL default (drawn)
 	PackNextSources: Next page of source files
-	LauncherFieldmultitouch: Allow simultaneous controls
 	PackUnboundKey: "{0} has no action in the current client bindings."
-	LauncherGroupGeneral: Geometry and appearance (tap to switch)
-	LauncherGroupBindings: Bindings and sectors (tap to switch)
-	LauncherGroupTextures: Texture layers (tap to switch)
 	LauncherRecordKey: Record keyboard key
 	LauncherPressKey: Press a keyboard key…
 	LauncherLayerNormal: Normal
@@ -595,85 +590,11 @@ UI: {
 	PackPreview: Check compatibility
 	PackReport: Open compatibility report
 	PackImportReplace: Replace preset and enable
-	PackSummary: "{0} controls, {1} images, {2} warnings"
+	PackSummary: "{0} controls, {1} warnings"
 	PackImported: Imported into preset {0}
 	PackFailed: Control pack operation failed
 	PackPassThroughWarning: World touch pass-through is disabled to prevent duplicate input.
-	PackOpenAssets: Open PNG folder
-	LauncherAdvancedProperties: Advanced control properties
-	LauncherPolygonPoints: Edit polygon vertices
-	LauncherDuplicate: Duplicate control
-	LauncherPropertyHint: Enter a value; arrows cycle options. PNG paths refer to this pack or UserAssets.
-	LauncherUnsupportedKey: Unsupported key. Use KEYBOARD_*, ACTION_* or TRIGGER_*.
-	LauncherInvalidPosition: X and Y must be between 0 and 1.
-	LauncherKindDPad: D-pad
-	LauncherKindTouchpad: Touchpad
-	LauncherKindMousewheel: Scroll wheel
-	LauncherKindText: Text
 	Save: Save
-	LauncherFieldtype: Control type
-	LauncherFieldname: Name
-	LauncherFieldwidth: Width / screen height
-	LauncherFieldheight: Height / screen height
-	LauncherFieldx: X / screen width
-	LauncherFieldy: Y / screen height
-	LauncherFieldrotation: Rotation (degrees)
-	LauncherFieldopacity: Opacity
-	LauncherFieldborderOpacity: Border opacity
-	LauncherFieldtextOpacity: Text opacity
-	LauncherFieldbgColor: Background ARGB
-	LauncherFieldtextColor: Text ARGB
-	LauncherFieldstrokeColor: Border ARGB
-	LauncherFieldstrokeWidth: Border width
-	LauncherFieldcornerRadius: Corner radius
-	LauncherFieldisVisible: Visible
-	LauncherFieldisPassThrough: Touch pass-through
-	LauncherFieldisSizeRatioLocked: Lock aspect ratio
-	LauncherFieldmode: Input mode
-	LauncherFieldkeycode: Key binding
-	LauncherFieldisToggle: Toggle button
-	LauncherFieldshape: Shape
-	LauncherFielduseTextureAlphaHitTest: Hit test PNG alpha
-	LauncherFieldstickKnobSize: Knob size ratio
-	LauncherFieldstickOpacity: Knob opacity
-	LauncherFieldjoystickKeys: Up / right / down / left keys
-	LauncherFieldupKeycode: Up binding
-	LauncherFieldrightKeycode: Right binding
-	LauncherFielddownKeycode: Down binding
-	LauncherFieldleftKeycode: Left binding
-	LauncherFieldstyle: D-pad style
-	LauncherFieldbuttonSpacing: Direction spacing
-	LauncherFieldbuttonSize: Direction size
-	LauncherFielddeadZone: Deadzone
-	LauncherFieldallowDiagonal: Allow diagonals
-	LauncherFieldactiveColor: Active ARGB
-	LauncherFieldshowLabels: Show direction labels
-	LauncherFieldsectorCount: Sector count (4–12)
-	LauncherFieldexpandedScale: Expanded scale
-	LauncherFielddeadZoneRatio: Center deadzone ratio
-	LauncherFieldexpandDuration: Expansion duration (ms)
-	LauncherFieldshowDividers: Show dividers
-	LauncherFielddividerColor: Divider ARGB
-	LauncherFieldselectedColor: Selected ARGB
-	LauncherFieldlabel: Sector label
-	LauncherFieldiconPath: Sector icon PNG
-	LauncherFielddisplayText: Displayed text
-	LauncherFieldisDoubleClickSimulateJoystick: Double-tap aim and drag
-	LauncherFieldorientation: Scroll direction
-	LauncherFieldreverseDirection: Reverse direction
-	LauncherFieldscrollSensitivity: Pixels per scroll step
-	LauncherFieldscrollRatio: Scroll multiplier
-	LauncherFieldpath: PNG path
-	LauncherFieldenabled: Enable layer
-	LauncherFieldscaleMode: Image fit
-	LauncherFieldtintColor: Tint ARGB (0 = none)
-	LauncherFieldpadding: Image padding ratio
-	LauncherFieldflipHorizontal: Flip horizontally
-	LauncherFieldflipVertical: Flip vertically
-	LauncherFieldclipToShape: Clip to shape
-	LauncherFieldnativeTexture: Built-in texture
-	LauncherFieldholdAction: Held native action
-	LauncherFieldpolygonPoints: Polygon vertices JSON
 	Accessories: Accessories
 	Achievements: Achievements
 	Add: Add
@@ -735,12 +656,9 @@ UI: {
 	Container: Container
 	ControlOpacity: Control opacity
 	ControlSize: Control size
-	ControlTexturePack: Control texture pack
 	Controls: Controls
 	CopyToPreset: Copy to preset
 	Corruption: Corruption
-	CouldNotLoadTexturePackCurrentArtworkWasKept: Could not load texture pack; current artwork was kept.
-	CouldNotOpenTheTexturePackFolder: Could not open the texture pack folder.
 	Craft: Craft
 	Crafting: Crafting
 	CraftingArea: Crafting
@@ -872,10 +790,22 @@ UI: {
 	ModKeybind: Mod keybind
 	ModKeybinds: Mod keybinds
 	ModUI: Mod UI
+	HideLayoutToolbar: Hide toolbar
+	ShowLayoutToolbar: Show toolbar
 	CalamityDifficulty: Calamity · Difficulty
 	CalamityFlightBar: Calamity · Flight Time
 	ModdedEquipmentExtensionsAreUnavailable: Modded equipment extensions are unavailable
 	MouseTouchSimulation: Mouse touch simulation
+	ShowMouseCursor: Show mouse cursor (trackpad mode)
+	TogglePointerMode: Switch between touch and mouse
+	DirectTouchMode: Touchscreen mode
+	TrackpadMode: Mouse mode
+	ShowKeyboard: Show keyboard
+	PerformanceDisplay: Performance display
+	PerformanceMean: Avg frame time
+	PerformanceWorst: Slowest frame
+	PerformanceResolution: Render resolution
+	PerformanceManagedMemory: Committed managed heap
 	Move: Move
 	MoveOnly: Move only
 	Multiplayer: Multiplayer
@@ -887,6 +817,10 @@ UI: {
 	NewPlayer: New Player
 	NewWorld: New World
 	NoCompatibleExternalModUIIsAvailable: No compatible external mod UI is available.
+	OpenModPanelForLayoutPreview: Open a mod panel to preview its layout here.
+	ModUiConflictLegend: "Red: overlap     Purple: preview only     Blue: editable mod UI"
+	BossChecklistLogButton: Boss Checklist log button
+	NoEditableModUi: No editable mod UI
 	NoCompatibleModUI: No compatible mod UI
 	NoMatchingRecipes: No matching recipes
 	NoModKeybindsAreLoaded: No mod keybinds are loaded
@@ -899,13 +833,11 @@ UI: {
 	Opacity: Opacity
 	OpaqueTooltips: Opaque tooltips
 	Open: Open
-	OpenTexturePackFolder: Open texture pack folder
 	OpenUse: Open / Use
 	Other: Other
 	Pants: Pants
 	Parallax: Parallax
 	Password: Password:
-	PlaceZipTexturePacksHereThenSelectTheControlTexturePackAbove: Place .zip texture packs here, then select the control texture pack above:
 	PlacementPreview: Placement preview
 	Play: Play
 	Port: Port:
@@ -982,8 +914,6 @@ UI: {
 	TargetLockMode: Target lock mode
 	Team: Team
 	Texture: Texture
-	TexturePackFailedToLoadDetailsWereWrittenToTheClientLog: Texture pack failed to load; details were written to the client log.
-	TheActiveTexturePackHasNoAvailableTextures: The active texture pack has no available textures.
 	TheHostLauncherIsUnavailableInThisVersion: The host launcher is unavailable in this version.
 	Toggle: Toggle
 	TogglePvP: Toggle PvP

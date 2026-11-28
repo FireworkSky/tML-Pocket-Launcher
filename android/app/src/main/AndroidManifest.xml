@@ -1,6 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="vnd.android.document/directory" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="resource/folder" />
+        </intent>
         <package android:name="com.and.games505.TerrariaPaid" />
         <intent>
             <action android:name="dev.tml.mobilelauncher.action.RENDERER_PLUGIN" />
@@ -18,6 +26,7 @@
     <uses-feature android:name="android.hardware.vulkan.version" android:version="1" android:required="false" />
 
     <application
+        android:name=".feature.launcher.LauncherApplication"
         android:allowBackup="false"
         android:requestLegacyExternalStorage="true"
         android:hardwareAccelerated="true"
@@ -28,11 +37,23 @@
         android:supportsRtl="true"
         android:usesCleartextTraffic="false"
         android:theme="@style/Theme.MobileLauncher">
+        <provider android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.controlpacks" android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/control_pack_paths" />
+        </provider>
+        <provider android:name=".feature.files.GameFoldersProvider"
+            android:authorities="${applicationId}.folders" android:exported="true"
+            android:grantUriPermissions="true" android:permission="android.permission.MANAGE_DOCUMENTS">
+            <intent-filter><action android:name="android.content.action.DOCUMENTS_PROVIDER" /></intent-filter>
+        </provider>
         <activity android:name="app.com.tmlpocket.feature.stores.GogLoginActivity"
             android:exported="false" android:theme="@style/Theme.MobileLauncher"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|uiMode" />
         <activity
             android:name="app.com.tmlpocket.feature.game.GameActivity"
+            android:enableOnBackInvokedCallback="true"
             android:configChanges="orientation|keyboardHidden|screenSize|screenLayout|smallestScreenSize|uiMode"
             android:exported="false"
             android:hardwareAccelerated="true"

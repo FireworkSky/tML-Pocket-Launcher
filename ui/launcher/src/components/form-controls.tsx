@@ -1,6 +1,22 @@
 import * as SelectPrimitive from '@animate-ui/react/primitives/radix-ui/select';
 import * as SliderPrimitive from '@animate-ui/react/primitives/radix-ui/slider';
+import { useCallback, useState } from 'react';
 import { Icon } from './ui';
+
+type SelectProps = {
+  label: string;
+  options: readonly (readonly [value: string, label: string, disabled?: boolean])[];
+  value?: string;
+  defaultValue?: string;
+  onChange?: (value: string) => void;
+  action?: string;
+  disabled?: boolean;
+};
+
+// Radix reserves the empty string for clearing a select. Filters can offer it as a choice.
+function optionValue(value: string) {
+  return '=' + value;
+}
 
 export function Select({
   label,
@@ -9,23 +25,31 @@ export function Select({
   defaultValue,
   onChange,
   action,
-}: {
-  label: string;
-  options: readonly (readonly [string, string])[];
-  value?: string;
-  defaultValue?: string;
-  onChange?: (value: string) => void;
-  action?: string;
-}) {
+  disabled,
+}: SelectProps) {
+  const [dialog, setDialog] = useState<HTMLDialogElement | null>(null);
+  const triggerRef = useCallback((element: HTMLButtonElement | null) => {
+    setDialog(element?.closest('dialog') ?? null);
+  }, []);
   return (
-    <SelectPrimitive.Root value={value} defaultValue={defaultValue} onValueChange={onChange}>
-      <SelectPrimitive.Trigger className="select-trigger" aria-label={label} data-action={action}>
+    <SelectPrimitive.Root
+      value={value === undefined ? undefined : optionValue(value)}
+      defaultValue={defaultValue === undefined ? undefined : optionValue(defaultValue)}
+      disabled={disabled}
+      onValueChange={(next) => onChange?.(next.slice(1))}
+    >
+      <SelectPrimitive.Trigger
+        ref={triggerRef}
+        className="select-trigger"
+        aria-label={label}
+        data-action={action}
+      >
         <SelectPrimitive.Value />
         <SelectPrimitive.Icon className="select-chevron">
           <Icon name="chevron" />
         </SelectPrimitive.Icon>
       </SelectPrimitive.Trigger>
-      <SelectPrimitive.Portal>
+      <SelectPrimitive.Portal container={dialog}>
         <SelectPrimitive.Content
           className="select-content primitive-popup"
           position="popper"
@@ -36,8 +60,13 @@ export function Select({
             <Icon name="chevron" />
           </SelectPrimitive.ScrollUpButton>
           <SelectPrimitive.Viewport className="select-viewport">
-            {options.map(([id, title]) => (
-              <SelectPrimitive.Item className="select-item" value={id} key={id}>
+            {options.map(([id, title, itemDisabled]) => (
+              <SelectPrimitive.Item
+                className="select-item"
+                value={optionValue(id)}
+                key={id}
+                disabled={itemDisabled}
+              >
                 <SelectPrimitive.ItemText>{title}</SelectPrimitive.ItemText>
                 <SelectPrimitive.ItemIndicator className="select-check">
                   <Icon name="check" />
@@ -54,11 +83,21 @@ export function Select({
   );
 }
 
+export function LabeledSelect({ className, ...props }: SelectProps & { className?: string }) {
+  return (
+    <label className={className}>
+      <span>{props.label}</span>
+      <Select {...props} />
+    </label>
+  );
+}
+
 export function Slider({
   label,
   value,
   min,
   max,
+  step = 1,
   onChange,
   id,
   unit = '%',
@@ -67,6 +106,7 @@ export function Slider({
   value: number;
   min: number;
   max: number;
+  step?: number;
   onChange: (value: number) => void;
   id?: string;
   unit?: string;
@@ -77,7 +117,7 @@ export function Slider({
         className="slider-control"
         min={min}
         max={max}
-        step={1}
+        step={step}
         value={[value]}
         onValueChange={([next]) => {
           if (next !== undefined) onChange(next);
@@ -90,11 +130,11 @@ export function Slider({
           className="slider-thumb"
           id={id}
           aria-label={label}
-          aria-valuetext={`${value}${unit}`}
+          aria-valuetext={`${Number(value.toFixed(2))}${unit}`}
         />
       </SliderPrimitive.Root>
       <output aria-live="off">
-        {value}
+        {Number(value.toFixed(2))}
         {unit}
       </output>
     </div>

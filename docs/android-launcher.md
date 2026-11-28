@@ -9,9 +9,9 @@ needed on a phone. The old Android button-list screen has been replaced.
 - Import Steam Terraria ZIPs, GOG Linux `.sh` offline installers or precompiled
   tModLoader release ZIPs using the launcher's file browser. GOG installers are
   parsed as data without running scripts; validation and installation are transactional.
-- Persist Terraria's source alongside its installed paths. Steam imports and
-  downloads require an active Steam session and a fresh Terraria ownership ticket
-  before every launch. GOG imports/downloads skip this login/ownership gate. Legacy
+- Persist Terraria's source alongside its installed paths. Steam ZIP imports require an active Steam session and a fresh Terraria ownership ticket
+  before every launch. Steam downloads verify ownership during acquisition and can launch offline.
+  Existing Steam installations without acquisition records need one successful online check after upgrade. GOG imports/downloads skip this login/ownership gate. Legacy
   installations without a source require Steam verification; reimport the GOG
   `.sh` to establish a GOG source. Selecting GOG does not accept a renamed ZIP.
 - Browse paginated official GitHub Releases, filter stable/preview, confirm size,
@@ -285,7 +285,7 @@ imports have separate choices, source labels and launch requirements. GOG local
 imports reuse the managed makeself parser without GOG authentication. The source
 is part of the package transaction, so a failed replacement retains the previous
 source as well as the previous resources. Missing/unknown source metadata defaults
-to Steam verification. Steam ownership is queried again with SteamKit before each
+to Steam verification. For manually imported Steam ZIPs, ownership is queried again with SteamKit before each
 launch; cached UI state cannot authorize it, and changing/disconnecting the account
 during the query invalidates the result.
 

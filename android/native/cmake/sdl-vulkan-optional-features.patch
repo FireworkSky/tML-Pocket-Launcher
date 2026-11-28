@@ -1,0 +1,173 @@
+diff --git a/src/gpu/SDL_gpu.c b/src/gpu/SDL_gpu.c
+index 085465e..8c746a2 100644
+--- a/src/gpu/SDL_gpu.c
++++ b/src/gpu/SDL_gpu.c
+@@ -639,7 +639,7 @@ static const SDL_GPUBootstrap * SDL_GPUSelectBackend(SDL_PropertiesID props)
+                     SDL_SetError("Required shader format for backend %s not provided!", gpudriver);
+                     return NULL;
+                 }
+-                if (backends[i]->PrepareDriver(_this)) {
++                if (backends[i]->PrepareDriver(_this, props)) {
+                     return backends[i];
+                 }
+             }
+@@ -654,7 +654,7 @@ static const SDL_GPUBootstrap * SDL_GPUSelectBackend(SDL_PropertiesID props)
+             // Don't select a backend which doesn't support the app's shaders.
+             continue;
+         }
+-        if (backends[i]->PrepareDriver(_this)) {
++        if (backends[i]->PrepareDriver(_this, props)) {
+             return backends[i];
+         }
+     }
+diff --git a/src/gpu/SDL_sysgpu.h b/src/gpu/SDL_sysgpu.h
+index c5a3fed..309cc84 100644
+--- a/src/gpu/SDL_sysgpu.h
++++ b/src/gpu/SDL_sysgpu.h
+@@ -1038,7 +1038,7 @@ typedef struct SDL_GPUBootstrap
+ {
+     const char *name;
+     const SDL_GPUShaderFormat shader_formats;
+-    bool (*PrepareDriver)(SDL_VideoDevice *_this);
++    bool (*PrepareDriver)(SDL_VideoDevice *_this, SDL_PropertiesID props);
+     SDL_GPUDevice *(*CreateDevice)(bool debug_mode, bool prefer_low_power, SDL_PropertiesID props);
+ } SDL_GPUBootstrap;
+ 
+diff --git a/src/gpu/d3d12/SDL_gpu_d3d12.c b/src/gpu/d3d12/SDL_gpu_d3d12.c
+index aa26833..78da9c9 100644
+--- a/src/gpu/d3d12/SDL_gpu_d3d12.c
++++ b/src/gpu/d3d12/SDL_gpu_d3d12.c
+@@ -8380,7 +8380,7 @@ static void D3D12_INTERNAL_InitBlitResources(
+     }
+ }
+ 
+-static bool D3D12_PrepareDriver(SDL_VideoDevice *_this)
++static bool D3D12_PrepareDriver(SDL_VideoDevice *_this, SDL_PropertiesID props)
+ {
+ #if defined(SDL_PLATFORM_XBOXONE) || defined(SDL_PLATFORM_XBOXSERIES)
+     return true;
+diff --git a/src/gpu/metal/SDL_gpu_metal.m b/src/gpu/metal/SDL_gpu_metal.m
+index c2c4267..485d403 100644
+--- a/src/gpu/metal/SDL_gpu_metal.m
++++ b/src/gpu/metal/SDL_gpu_metal.m
+@@ -4282,7 +4282,7 @@ static bool METAL_SupportsTextureFormat(
+ 
+ // Device Creation
+ 
+-static bool METAL_PrepareDriver(SDL_VideoDevice *this)
++static bool METAL_PrepareDriver(SDL_VideoDevice *this, SDL_PropertiesID props)
+ {
+     if (@available(macOS 10.14, iOS 13.0, tvOS 13.0, *)) {
+         return (this->Metal_CreateView != NULL);
+diff --git a/src/gpu/vulkan/SDL_gpu_vulkan.c b/src/gpu/vulkan/SDL_gpu_vulkan.c
+index 0869654..f030b02 100644
+--- a/src/gpu/vulkan/SDL_gpu_vulkan.c
++++ b/src/gpu/vulkan/SDL_gpu_vulkan.c
+@@ -1131,6 +1131,7 @@ struct VulkanRenderer
+     VkPhysicalDevice physicalDevice;
+     VkPhysicalDeviceProperties2KHR physicalDeviceProperties;
+     VkPhysicalDeviceDriverPropertiesKHR physicalDeviceDriverProperties;
++    VkPhysicalDeviceFeatures desiredDeviceFeatures;
+     VkDevice logicalDevice;
+     Uint8 integratedMemoryNotification;
+     Uint8 outOfDeviceLocalMemoryWarning;
+@@ -11344,9 +11345,10 @@ static Uint8 VULKAN_INTERNAL_IsDeviceSuitable(
+         &deviceFeatures);
+     if (!deviceFeatures.independentBlend ||
+         !deviceFeatures.imageCubeArray ||
+-        !deviceFeatures.depthClamp ||
+-        !deviceFeatures.shaderClipDistance ||
+-        !deviceFeatures.drawIndirectFirstInstance) {
++        !deviceFeatures.samplerAnisotropy ||
++        (renderer->desiredDeviceFeatures.depthClamp && !deviceFeatures.depthClamp) ||
++        (renderer->desiredDeviceFeatures.shaderClipDistance && !deviceFeatures.shaderClipDistance) ||
++        (renderer->desiredDeviceFeatures.drawIndirectFirstInstance && !deviceFeatures.drawIndirectFirstInstance)) {
+         return 0;
+     }
+ 
+@@ -11562,7 +11564,6 @@ static Uint8 VULKAN_INTERNAL_CreateLogicalDevice(
+ {
+     VkResult vulkanResult;
+     VkDeviceCreateInfo deviceCreateInfo;
+-    VkPhysicalDeviceFeatures desiredDeviceFeatures;
+     VkPhysicalDeviceFeatures haveDeviceFeatures;
+     VkPhysicalDevicePortabilitySubsetFeaturesKHR portabilityFeatures;
+     const char **deviceExtensions;
+@@ -11586,21 +11587,13 @@ static Uint8 VULKAN_INTERNAL_CreateLogicalDevice(
+ 
+     // specifying used device features
+ 
+-    SDL_zero(desiredDeviceFeatures);
+-    desiredDeviceFeatures.independentBlend = VK_TRUE;
+-    desiredDeviceFeatures.samplerAnisotropy = VK_TRUE;
+-    desiredDeviceFeatures.imageCubeArray = VK_TRUE;
+-    desiredDeviceFeatures.depthClamp = VK_TRUE;
+-    desiredDeviceFeatures.shaderClipDistance = VK_TRUE;
+-    desiredDeviceFeatures.drawIndirectFirstInstance = VK_TRUE;
+-
+     if (haveDeviceFeatures.fillModeNonSolid) {
+-        desiredDeviceFeatures.fillModeNonSolid = VK_TRUE;
++        renderer->desiredDeviceFeatures.fillModeNonSolid = VK_TRUE;
+         renderer->supportsFillModeNonSolid = true;
+     }
+ 
+     if (haveDeviceFeatures.multiDrawIndirect) {
+-        desiredDeviceFeatures.multiDrawIndirect = VK_TRUE;
++        renderer->desiredDeviceFeatures.multiDrawIndirect = VK_TRUE;
+         renderer->supportsMultiDrawIndirect = true;
+     }
+ 
+@@ -11641,7 +11634,7 @@ static Uint8 VULKAN_INTERNAL_CreateLogicalDevice(
+         deviceCreateInfo.enabledExtensionCount);
+     CreateDeviceExtensionArray(&renderer->supports, deviceExtensions);
+     deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions;
+-    deviceCreateInfo.pEnabledFeatures = &desiredDeviceFeatures;
++    deviceCreateInfo.pEnabledFeatures = &renderer->desiredDeviceFeatures;
+ 
+     vulkanResult = renderer->vkCreateDevice(
+         renderer->physicalDevice,
+@@ -11706,8 +11699,16 @@ static void VULKAN_INTERNAL_LoadEntryPoints(void)
+ }
+ 
+ static bool VULKAN_INTERNAL_PrepareVulkan(
+-    VulkanRenderer *renderer)
++    VulkanRenderer *renderer, SDL_PropertiesID props)
+ {
++    VkPhysicalDeviceFeatures *features = &renderer->desiredDeviceFeatures;
++    features->independentBlend = VK_TRUE;
++    features->imageCubeArray = VK_TRUE;
++    features->samplerAnisotropy = VK_TRUE;
++    features->depthClamp = SDL_GetBooleanProperty(props, "SDL.gpu.device.create.feature.depth_clamping", true);
++    features->shaderClipDistance = SDL_GetBooleanProperty(props, "SDL.gpu.device.create.feature.clip_distance", true);
++    features->drawIndirectFirstInstance = SDL_GetBooleanProperty(props, "SDL.gpu.device.create.feature.indirect_draw_first_instance", true);
++
+     VULKAN_INTERNAL_LoadEntryPoints();
+ 
+     if (!VULKAN_INTERNAL_CreateInstance(renderer)) {
+@@ -11726,7 +11727,7 @@ static bool VULKAN_INTERNAL_PrepareVulkan(
+     return true;
+ }
+ 
+-static bool VULKAN_PrepareDriver(SDL_VideoDevice *_this)
++static bool VULKAN_PrepareDriver(SDL_VideoDevice *_this, SDL_PropertiesID props)
+ {
+     // Set up dummy VulkanRenderer
+     VulkanRenderer *renderer;
+@@ -11742,7 +11743,7 @@ static bool VULKAN_PrepareDriver(SDL_VideoDevice *_this)
+ 
+     renderer = (VulkanRenderer *)SDL_calloc(1, sizeof(*renderer));
+     if (renderer) {
+-        result = VULKAN_INTERNAL_PrepareVulkan(renderer);
++        result = VULKAN_INTERNAL_PrepareVulkan(renderer, props);
+         if (result) {
+             renderer->vkDestroyInstance(renderer->instance, NULL);
+         }
+@@ -11775,7 +11776,7 @@ static SDL_GPUDevice *VULKAN_CreateDevice(bool debugMode, bool preferLowPower, S
+     renderer->preferLowPower = preferLowPower;
+     renderer->allowedFramesInFlight = 2;
+ 
+-    if (!VULKAN_INTERNAL_PrepareVulkan(renderer)) {
++    if (!VULKAN_INTERNAL_PrepareVulkan(renderer, props)) {
+         SET_STRING_ERROR("Failed to initialize Vulkan!");
+         SDL_free(renderer);
+         SDL_Vulkan_UnloadLibrary();

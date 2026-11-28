@@ -123,7 +123,8 @@ internal sealed partial class MobileMultiplayerSystem : MobileSystem
 		if (touchId < 0) pointer = new(mouse.X, mouse.Y);
 		down = mouse.LeftButton == ButtonState.Pressed;
 		bool cancelled = false;
-		TouchCollection touches = MobileTouchInput.GetState();
+		TouchCollection touches = MobileTouchInput.GetMenuContacts();
+		if (MobileTrackpad.Enabled) { touchId = -1; down = MobileTrackpad.ReadPointer(ref pointer); }
 		if (touchId < 0) foreach (TouchLocation touch in touches)
 			if (touch.State == TouchLocationState.Pressed) { touchId = touch.Id; break; }
 		if (touchId >= 0) {

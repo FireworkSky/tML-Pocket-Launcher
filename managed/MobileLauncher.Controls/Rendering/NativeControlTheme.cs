@@ -24,7 +24,7 @@ internal static class NativeControlTheme
 	internal static void Surface(SpriteBatch batch, Vector2 center, float radius, Color color, bool pressed = false)
 	{
 		if (radius <= 0f) return;
-		ControlTexturePackSystem.TryDrawDefault(batch, pressed ? "PhonePressedCircle" : "PhonePurpleCircle",
+		DefaultControlTextures.TryDrawDefault(batch, pressed ? "PhonePressedCircle" : "PhonePurpleCircle",
 			center, radius * 2f, color);
 	}
 
@@ -36,7 +36,7 @@ internal static class NativeControlTheme
 			&& MobileJoystickInput.AimRightClickMode;
 		Item rightClickItem = showRightClickItem ? MobileJoystickInput.GetHeldItem() : null;
 		bool hasRightClickItem = rightClickItem is { IsAir: false };
-		ControlTexturePackSystem.TryDrawDefault(batch, "JoystickPad", center, radius * 2f, color);
+		DefaultControlTextures.TryDrawDefault(batch, "JoystickPad", center, radius * 2f, color);
 		Vector2 knob = center + offset * radius * .46f;
 		string knobTexture = !defaultKnob ? textureName : role switch {
 			MobileJoystickRole.Move => "JoystickKnob",
@@ -44,9 +44,9 @@ internal static class NativeControlTheme
 			MobileJoystickRole.Aim when !hasRightClickItem => MobileControlArtwork.AimKnobTexture,
 			_ => "ItemButtonFrame"
 		};
-		bool customKnob = ControlTexturePackSystem.TryDraw(batch, knobTexture, knob, radius,
+		bool customKnob = DefaultControlTextures.TryDraw(batch, knobTexture, knob, radius,
 			pressed || selected ? Color.White : color);
-		if (!customKnob && defaultKnob) ControlTexturePackSystem.TryDrawDefault(batch, knobTexture, knob, radius,
+		if (!customKnob && defaultKnob) DefaultControlTextures.TryDrawDefault(batch, knobTexture, knob, radius,
 			pressed || selected ? Color.White : color);
 		if (role == MobileJoystickRole.Aim) {
 			if (hasRightClickItem) MobileJoystickSystem.DrawItemIcon(batch, rightClickItem, knob, radius * .65f, color);
@@ -98,14 +98,14 @@ internal static class NativeControlTheme
 
 	internal static void Glyph(SpriteBatch batch, string name, Vector2 center, float size, Color color)
 	{
-		if (ControlTexturePackSystem.TryDrawDefault(batch, PackGlyphName(name), center, size, color)) return;
+		if (DefaultControlTextures.TryDrawDefault(batch, PackGlyphName(name), center, size, color)) return;
 		float opacity = color.A / 255f;
 		DrawMask(batch, name, center + Vector2.One * Math.Max(1f, size / 35f), size, Color.Black * (.5f * opacity));
 		DrawMask(batch, name, center, size, color.MultiplyRGB(Foreground));
 	}
 
 	internal static void Reticle(SpriteBatch batch, Vector2 center, float size, Color color)
-		=> ControlTexturePackSystem.TryDrawDefault(batch, "AimReticle", center, size, color);
+		=> DefaultControlTextures.TryDrawDefault(batch, "AimReticle", center, size, color);
 
 	internal static string RadialCenterTexture => "PhoneTealCircle";
 	internal static string RadialBaseTexture => "PhonePurpleCircle";
@@ -114,10 +114,10 @@ internal static class NativeControlTheme
 	internal static void Radial(SpriteBatch batch, Vector2 center, float radius, Color color)
 	{
 		float diameter = radius * 5.6f;
-		ControlTexturePackSystem.TryDrawDefault(batch, RadialBaseTexture, center, diameter, color);
+		DefaultControlTextures.TryDrawDefault(batch, RadialBaseTexture, center, diameter, color);
 		Color ringColor = color.MultiplyRGB(new Color(142, 124, 220));
-		ControlTexturePackSystem.TryDrawDefault(batch, RadialRingTexture, center, diameter, ringColor);
-		ControlTexturePackSystem.TryDrawDefault(batch, RadialCenterTexture, center, radius * 2f, color);
+		DefaultControlTextures.TryDrawDefault(batch, RadialRingTexture, center, diameter, ringColor);
+		DefaultControlTextures.TryDrawDefault(batch, RadialCenterTexture, center, radius * 2f, color);
 	}
 
 	internal static void DrawMask(SpriteBatch batch, string name, Vector2 center, float size, Color color)
@@ -141,7 +141,7 @@ internal static class NativeControlTheme
 			_ => 0
 		};
 		if (item > 0) { Main.instance.LoadItem(item); return TextureAssets.Item[item].Value; }
-		if (ControlTexturePackSystem.GetTexture(name) is Texture2D packed) return packed;
+		if (DefaultControlTextures.GetTexture(name) is Texture2D packed) return packed;
 		return Mask(Symbol(name));
 	}
 
@@ -156,7 +156,7 @@ internal static class NativeControlTheme
 				: name == "Mana" ? MobileControlAction.Mana : MobileControlAction.Buff, center, size, color);
 			return true;
 		}
-		return ControlTexturePackSystem.TryDrawDefault(batch, name, center, size, color);
+		return DefaultControlTextures.TryDrawDefault(batch, name, center, size, color);
 	}
 
 	private static string Symbol(string name) => name switch {

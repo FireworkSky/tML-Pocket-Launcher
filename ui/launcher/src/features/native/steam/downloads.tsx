@@ -7,7 +7,9 @@ import { type DownloadTask, useDownloads } from '../download-state';
 import { ModDependencies } from '../mod-dependencies';
 
 const STATUS_LABELS = {
+  queued: '等待下载',
   running: '下载进行中',
+  paused: '已暂停',
   completed: '安装完成',
   failed: '下载未完成',
   cancelled: '下载已取消',
@@ -22,7 +24,8 @@ function DownloadCard({ task, compact }: { task: DownloadTask; compact: boolean 
   const progress = task.progress >= 0 ? task.progress : null;
   const completed = task.status === 'completed';
   const failed = task.status === 'failed';
-  const canRetry = failed || task.status === 'cancelled';
+  const canRetry = failed || task.status === 'cancelled' || task.status === 'paused';
+  const resumable = task.method === 'download';
   const steam = task.method === 'store.steam.download';
   const workshop = task.method === 'workshop.download';
   const terrariaWorkshop =
@@ -47,9 +50,15 @@ function DownloadCard({ task, compact }: { task: DownloadTask; compact: boolean 
   return (
     <article className={`download-card ${completed ? 'is-complete' : ''}`} aria-label={task.name}>
       <div className="download-game-line">
-        <span className="download-game-icon">
-          <Icon name={workshop ? (terrariaWorkshop ? 'wallpaper' : 'mod') : 'game'} />
-        </span>
+        {workshop ? (
+          <span className="download-game-icon">
+            <Icon name={terrariaWorkshop ? 'wallpaper' : 'mod'} />
+          </span>
+        ) : (
+          <span className="download-game-icon download-game-artwork">
+            <img src={resumable ? '/tmodloader.png' : '/terraria.png'} alt="" />
+          </span>
+        )}
         <div>
           <span className="download-eyebrow">{t(task.source)}</span>
           <h3>{task.name}</h3>
@@ -79,9 +88,18 @@ function DownloadCard({ task, compact }: { task: DownloadTask; compact: boolean 
         </details>
       )}
       <div className="download-card-actions">
-        {running && (
-          <Button disabled={task.cancelling} onClick={downloads.cancel}>
-            {task.cancelling ? t('正在取消…') : t('取消任务')}
+        {(task.status === 'queued' ||
+          (running && (!resumable || nativeState?.downloadCanPause !== false))) && (
+          <Button disabled={task.cancelling} onClick={() => downloads.cancel(task.id)}>
+            {t(
+              resumable
+                ? task.cancelling
+                  ? '正在暂停…'
+                  : '暂停'
+                : task.cancelling
+                  ? '正在取消…'
+                  : '取消任务',
+            )}
           </Button>
         )}
         {completed && (
@@ -94,13 +112,14 @@ function DownloadCard({ task, compact }: { task: DownloadTask; compact: boolean 
           <Button
             variant="primary"
             disabled={
-              downloads.tasks.some((entry) => entry.status === 'running') ||
-              nativeState?.busy ||
+              (!resumable &&
+                (downloads.tasks.some((entry) => entry.status === 'running') ||
+                  nativeState?.busy)) ||
               (steam && (account?.phase !== 'ready' || !account.owned))
             }
             onClick={() => downloads.retry(task.id)}
           >
-            {t('重新下载')}
+            {t(resumable && task.status !== 'cancelled' ? '继续下载' : '重新下载')}
           </Button>
         )}
         {canRetry && steam && account?.phase !== 'ready' && (

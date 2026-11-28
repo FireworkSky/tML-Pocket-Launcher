@@ -104,7 +104,8 @@ public class MobileSelectionSystem : MobileSystem
 		var mouse = Mouse.GetState();
 		if (touchId < 0) pointer = new(mouse.X, mouse.Y);
 		down = mouse.LeftButton == ButtonState.Pressed;
-		TouchCollection touches = MobileTouchInput.GetState();
+		TouchCollection touches = MobileTouchInput.GetMenuContacts();
+		if (MobileTrackpad.Enabled) { touchId = -1; down = MobileTrackpad.ReadPointer(ref pointer); }
 		if (touchId < 0) foreach (TouchLocation t in touches) if (t.State == TouchLocationState.Pressed) { touchId = t.Id; break; }
 		if (touchId >= 0) {
 			bool found = false; down = false;

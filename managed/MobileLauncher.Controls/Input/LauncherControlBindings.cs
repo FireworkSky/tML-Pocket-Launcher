@@ -23,7 +23,7 @@ internal static class LauncherControlBindings
 	{
 		if (key == null) return null;
 		if (key == "MOUSE_LEFT") return "Mouse1";
-		if (key is "MOUSE_RIGHT" or "SPECIAL_TOUCHPAD_RIGHT_BUTTON") return "Mouse2";
+		if (key == "MOUSE_RIGHT") return "Mouse2";
 		if (key == "MOUSE_MIDDLE") return "Mouse3";
 		if (!key.StartsWith("KEYBOARD_", StringComparison.Ordinal)) return null;
 		string name = key[9..];
@@ -32,22 +32,14 @@ internal static class LauncherControlBindings
 		if (name.StartsWith("KP_") && name.Length == 4 && char.IsDigit(name[3])) return "NumPad" + name[3];
 		return Enum.TryParse(name, true, out Keys value) && Enum.IsDefined(value) && value != Keys.None ? value.ToString() : null;
 	}
-	internal static string LauncherKey(Keys key)
-	{
-		string name = key.ToString();
-		var alias = aliases.FirstOrDefault(pair => pair.Value.Equals(name, StringComparison.OrdinalIgnoreCase));
-		if (alias.Key != null) return "KEYBOARD_" + alias.Key;
-		if (name.Length == 2 && name[0] == 'D' && char.IsDigit(name[1])) return "KEYBOARD_" + name[1];
-		if (name.StartsWith("NumPad", StringComparison.Ordinal)) return "KEYBOARD_KP_" + name[6..];
-		string result = "KEYBOARD_" + name.ToUpperInvariant();
-		return InputName(result) != null ? result : null;
-	}
-	internal static bool Supported(string key) => key == "UNKNOWN" || key is "MOUSE_WHEEL_UP" or "MOUSE_WHEEL_DOWN" || InputName(key) != null
+	internal static bool Supported(string key) => key == "UNKNOWN" || InputName(key) != null
 		|| key?.StartsWith(MobileKeyboardBindings.LauncherPrefix, StringComparison.Ordinal) == true && MobileKeyboardBindings.Validate(key[MobileKeyboardBindings.LauncherPrefix.Length..]).Length > 0
 		|| key?.StartsWith("TRIGGER_", StringComparison.Ordinal) == true && key.Length > 8
 		|| key?.StartsWith("ACTION_", StringComparison.Ordinal) == true && Enum.TryParse(key[7..], out MobileControlAction action) && Enum.IsDefined(action) && action is not (MobileControlAction.LauncherControl or MobileControlAction.RadialMenu or MobileControlAction.QuickPotions or MobileControlAction.Zoom or MobileControlAction.KeyboardKey);
 	// Recognize obsolete serialized bindings only so old presets can be cleaned.
 	internal static bool RemovedBinding(string key) => key?.StartsWith("XBOX_", StringComparison.Ordinal) == true;
+	internal static bool RemovedPointerBinding(string key)
+		=> key is "SPECIAL_TOUCHPAD_RIGHT_BUTTON" or "MOUSE_WHEEL_UP" or "MOUSE_WHEEL_DOWN";
 	internal static IEnumerable<string> Resolve(string key)
 	{
 		string input = InputName(key);

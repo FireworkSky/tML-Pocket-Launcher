@@ -88,7 +88,7 @@ export interface LauncherState {
   settingsTab: SettingsTab;
   localQuery: string;
   localFilter: 'all' | 'enabled' | 'disabled';
-  localSort: 'name' | 'enabled' | 'updated';
+  localSort: 'name' | 'size' | 'enabled' | 'updated';
   filters: ModFilters;
   mods: Mod[];
   packs: ModPack[];

@@ -26,6 +26,10 @@ internal static class MobileTouchInput
     internal static bool UsingTouch { get; private set; }
     private static Point lastMousePosition;
     private static bool suppressMouseUntilRelease;
+    private const string TrackpadInputKey = "MobileLauncher.TrackpadInput";
+    private static int? hudFingerThisSample;
+    private static readonly HashSet<int> keyboardFingers = new(), capturedKeyboardSample = new();
+    private static Vector2 Normalized(Vector2 p) => p / new Vector2(Math.Max(1, TouchPanel.DisplayWidth), Math.Max(1, TouchPanel.DisplayHeight));
 
     internal static void Load()
     {
@@ -38,10 +42,24 @@ internal static class MobileTouchInput
             orig();
             lock (Sync) sampled = false;
         }));
+        AppContext.SetData(TrackpadInputKey, (Func<(Vector2 Position, bool Pressed)?>)MobileTrackpad.Sample);
+        AppContext.SetData("MobileLauncher.KeyboardFinger", (Func<int, bool>)(id => {
+            GetState();
+            return capturedKeyboardSample.Contains(id);
+        }));
+        AppContext.SetData("MobileLauncher.FpsFinger", (Func<int?>)(() => {
+            if (!MobilePerformanceHud.CanGrab) return null;
+            GetState();
+            return hudFingerThisSample;
+        }));
     }
 
     internal static void Unload()
     {
+        AppContext.SetData(TrackpadInputKey, null);
+        AppContext.SetData("MobileLauncher.KeyboardFinger", null);
+        AppContext.SetData("MobileLauncher.FpsFinger", null);
+        MobileTrackpad.Reset();
         updateHook?.Dispose(); eventHook?.Dispose();
         updateHook = eventHook = null;
         Reset();
@@ -53,6 +71,11 @@ internal static class MobileTouchInput
             presses.Clear(); releases.Clear(); deferredReleases.Clear();
             contactIds.Clear(); nextContactId = 0; UsingTouch = false;
             suppressMouseUntilRelease = false;
+            hudFingerThisSample = null;
+            keyboardFingers.Clear();
+            capturedKeyboardSample.Clear();
+            MobileKeyboardButton.Clear();
+            MobilePerformanceHud.ClearBounds();
             sampled = false; cached = default;
         }
     }
@@ -85,7 +108,8 @@ internal static class MobileTouchInput
             foreach (var release in releases)
                 if (!presses.ContainsKey(release.Key)) contacts[release.Key] = new(release.Key, TouchLocationState.Released, release.Value);
             foreach (var press in presses) {
-                var position = contacts.TryGetValue(press.Key, out var touch) && touch.State is TouchLocationState.Pressed or TouchLocationState.Moved
+                bool startsOnHud = MobilePerformanceHud.CanGrab && MobilePerformanceHud.Drag.Hit(Normalized(press.Value));
+                var position = !startsOnHud && !MobileTrackpad.Enabled && contacts.TryGetValue(press.Key, out var touch) && touch.State is TouchLocationState.Pressed or TouchLocationState.Moved
                     ? touch.Position : press.Value;
                 contacts[press.Key] = new(press.Key, TouchLocationState.Pressed, position);
                 if (releases.TryGetValue(press.Key, out var end)) deferredReleases[press.Key] = end;
@@ -103,15 +127,30 @@ internal static class MobileTouchInput
     {
         var result = new List<TouchLocation>();
         var present = new HashSet<int>();
+        hudFingerThisSample = null;
+        capturedKeyboardSample.Clear();
         foreach (var touch in touches) {
             if (touch.State == TouchLocationState.Invalid) continue;
             present.Add(touch.Id);
+            if (touch.State == TouchLocationState.Pressed && Main.hasFocus && MobileKeyboardButton.Hit(Normalized(touch.Position))
+                && keyboardFingers.Add(touch.Id)) MobileTextInputSystem.ShowKeyboard();
+            if (keyboardFingers.Contains(touch.Id)) {
+                capturedKeyboardSample.Add(touch.Id);
+                if (touch.State == TouchLocationState.Released) keyboardFingers.Remove(touch.Id);
+                continue;
+            }
+            if (MobilePerformanceHud.Drag.Consume(touch.Id, touch.State, Normalized(touch.Position), Main.hasFocus && MobilePerformanceHud.CanGrab)) {
+                hudFingerThisSample = touch.Id;
+                continue;
+            }
             if (!contactIds.TryGetValue(touch.Id, out int id)) {
                 id = nextContactId = nextContactId == int.MaxValue ? 1 : nextContactId + 1;
                 contactIds[touch.Id] = id;
             }
             result.Add(new TouchLocation(id, touch.State, touch.Position));
         }
+        if (MobilePerformanceHud.Drag.Finger is int owner && !present.Contains(owner)) MobilePerformanceHud.Drag.End();
+        keyboardFingers.IntersectWith(present);
         foreach (int id in new List<int>(contactIds.Keys))
             if (!present.Contains(id)) contactIds.Remove(id);
         var mouse = PlayerInput.MouseInfo;
@@ -126,6 +165,11 @@ internal static class MobileTouchInput
     {
         cancelled = !Main.hasFocus;
         if (cancelled) { id = -1; return false; }
+        if (MobileTrackpad.Enabled && !MobileMenuSystem.UsesDirectEditorTouch) {
+            id = -1;
+            suppressMouseUntilRelease = false;
+            return MobileTrackpad.ReadPointer(ref position);
+        }
         TouchCollection touches = GetState();
         if (touches.Count > 0) suppressMouseUntilRelease = true;
         bool captured = id >= 0;
@@ -160,4 +204,6 @@ internal static class MobileTouchInput
         position = new Vector2(mouse.X, mouse.Y) * PlayerInput.RawMouseScale;
         return mouse.LeftButton == ButtonState.Pressed;
     }
+
+    internal static TouchCollection GetMenuContacts() => MobileTrackpad.Enabled ? MobileTrackpad.EmptyContacts : GetState();
 }

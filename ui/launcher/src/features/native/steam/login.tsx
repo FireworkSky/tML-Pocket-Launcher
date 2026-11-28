@@ -66,7 +66,7 @@ export function SteamLoginPage() {
           </p>
         </div>
         <div className="steam-resource-note">
-          <Icon name="game" />
+          <img src="/terraria.png" alt="" />
           <span>
             Terraria<small>{t('已购游戏资源')}</small>
           </span>

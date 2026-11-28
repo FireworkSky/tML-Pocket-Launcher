@@ -13,11 +13,13 @@ import { Select, Slider } from '../components/form-controls';
 import { DemoControl } from '../components/demo-control';
 import { useWorkspaceActions } from './home';
 import type { SettingsTab } from '../domain/types';
+import { projectCommunity, projectUrl } from '../domain/project';
 import { prepareBackground } from '../native/background';
 import { nativeRequest } from '../native/bridge';
 import { isLanguagePreference, useTranslation } from '../i18n';
 import { hexToRgb, rgbToHex, tintGradient, tintInk, type TintRGB } from '../domain/background-tint';
 import { useNativeFileBrowser } from './native/files';
+import { LauncherNoticeContent } from './launcher-notice';
 import {
   NativeRuntimeSettings,
   NativeControlsSettings,
@@ -176,8 +178,8 @@ function Appearance() {
               label={t('主题样式')}
               action="frontend-style"
               options={[
-                ['default', t('默认')],
                 ['tml', t('泰拉风')],
+                ['default', t('玻璃风')],
               ]}
               value={prefs.themeStyle}
               onChange={(themeStyle) => {
@@ -444,17 +446,6 @@ function Runtime() {
             ]}
           />
         </SettingRow>
-        <SettingRow title={t('分辨率比例')} description={t('降低比例可减轻渲染负担。')}>
-          <Select
-            label={t('分辨率比例')}
-            defaultValue="100"
-            options={[
-              ['100', '100%'],
-              ['75', '75%'],
-              ['50', '50%'],
-            ]}
-          />
-        </SettingRow>
         <SettingRow title={t('启动参数')} description={t('高级选项，启动时应用。')}>
           <Button variant="ghost" symbol="chevron" onClick={() => showInfo('launch-args')}>
             {t('编辑参数')}
@@ -534,6 +525,17 @@ function Storage() {
     </section>
   );
 }
+function AboutLink({ href, label }: { href: string; label: string }) {
+  const { t } = useTranslation();
+  return href ? (
+    <a className="about-link" href={href}>
+      {label}
+    </a>
+  ) : (
+    <span className="muted">{t('链接待公布')}</span>
+  );
+}
+
 function About() {
   const { t } = useTranslation();
   const { showInfo, nativeMode, nativeState } = useWorkspaceActions();
@@ -547,13 +549,63 @@ function About() {
           </span>
           <div className="resource-copy">
             <h3>tML Pocket Launcher</h3>
-            <p>{t('Android 上的 tModLoader 启动与管理工具。')}</p>
+            <p>{t('在 Android 上玩 tModLoader。导入自己的 Terraria 资源，为不同玩法建立实例，各自保存角色、世界、模组和触控布局。')}</p>
             <Badge>
               {nativeMode ? `Android · ${nativeState?.appVersion || ''}` : t('界面框架设计稿')}
             </Badge>
           </div>
         </div>
-        <SettingRow title={t('诊断日志')} description={t('启动失败时查看并导出日志。')}>
+        <SettingRow title={t('项目作者')} description={t('FireworkSky 开发和维护这款启动器，将桌面版 tModLoader 适配到 Android。')}>
+          <AboutLink href="https://github.com/FireworkSky" label="FireworkSky" />
+        </SettingRow>
+        <SettingRow title={t('项目地址')} description={t('源代码、构建步骤和改动记录都在 GitHub 仓库中。')}>
+          <AboutLink href={projectUrl} label="GitHub" />
+        </SettingRow>
+        <SettingRow title={t('贡献者与致谢')} description={t('Aalt-hy 参与了工作区标签、页面过渡和玻璃面板的设计。游戏内触控基于 yu 的 MobileJoystick，部分 Android 适配来自 RotatingartLauncher。')}>
+          <AboutLink href={projectUrl + '/graphs/contributors'} label={t('查看贡献记录')} />
+        </SettingRow>
+        <SettingRow title={t('第一次使用')} description={t('从选择 Steam、GOG 或手机版资源开始，跟着指南完成首次启动，再添加想玩的模组。')}>
+          <AboutLink href={projectUrl + '/blob/HEAD/docs/getting-started.md'} label={t('阅读入门指南')} />
+        </SettingRow>
+        <SettingRow title={t('版本与更新')} description={t('在发布页查看各版本的更新说明和可下载的 APK。')}>
+          <AboutLink href={projectUrl + '/releases'} label={t('查看发布版本')} />
+        </SettingRow>
+      </div>
+      <h2>{t('社区交流')}</h2>
+      <div className="panel">
+        <SettingRow title={t('QQ 群')} description={t('在「tML Pocket Launcher 一群」聊模组搭配、分享触控布局，或请群友一起排查安装问题。')}>
+          <AboutLink href={projectCommunity.qqInvite} label={t('加入 QQ 群')} />
+        </SettingRow>
+        <SettingRow title="Discord" description={t('来和其他玩家交流游玩体验。分享设备型号、模组版本和截图，方便大家比较同一模组在不同手机上的表现。')}>
+          <AboutLink href={projectCommunity.discordInvite} label={t('加入 Discord')} />
+        </SettingRow>
+        <SettingRow title={t('报告问题或提出建议')} description={t('遇到能重复出现的问题，可以在 GitHub Issues 留下操作步骤和诊断日志，并在同一条记录里跟进进展。')}>
+          <AboutLink href={projectUrl + '/issues'} label={t('查看 GitHub Issues')} />
+        </SettingRow>
+      </div>
+      <h2>{t('支持我们')}</h2>
+      <div className="panel">
+        <SettingRow title={t('赞助地址')} description={t('如果你喜欢用这款启动器玩模组，可以通过 FireworkSky 的爱发电主页自愿赞助项目。')}>
+          <AboutLink href={projectCommunity.sponsorshipUrl} label={t('前往爱发电')} />
+        </SettingRow>
+        <SettingRow title={t('参与项目')} description={t('发现文档漏了一步，或已经修好了一个问题？可以提交文档修改、代码补丁和设备测试结果。')}>
+          <AboutLink href={projectUrl + '/blob/HEAD/CONTRIBUTING.md'} label={t('阅读贡献指南')} />
+        </SettingRow>
+        <SettingRow title={t('支持者名单')} description={t('感谢支持开发的玩家。这里展示愿意公开署名的支持者昵称。')}>
+          {projectCommunity.supporters.length ? (
+            <ul className="about-supporters">
+              {projectCommunity.supporters.map((name, index) => (
+                <li key={index}>{name}</li>
+              ))}
+            </ul>
+          ) : (
+            <span className="muted">{t('暂无公开名单')}</span>
+          )}
+        </SettingRow>
+      </div>
+      <h2>{t('日志与许可')}</h2>
+      <div className="panel">
+        <SettingRow title={t('诊断日志')} description={t('查看并分享最近的游戏运行日志。')}>
           <Button variant="ghost" symbol="chevron" onClick={() => showInfo('logs')}>
             {t('查看日志')}
           </Button>
@@ -563,6 +615,10 @@ function About() {
             {t('查看说明')}
           </Button>
         </SettingRow>
+        <details className="launcher-notice-settings">
+          <summary>{t('法律声明、注意事项与问题反馈')}</summary>
+          <LauncherNoticeContent />
+        </details>
         <div className="about-preview">
           <DemoControl />
         </div>

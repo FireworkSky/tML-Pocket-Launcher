@@ -3,10 +3,10 @@ package app.com.tmlpocket.core.runtime
 import android.content.Context
 import android.system.Os
 import android.util.Log
+import app.com.tmlpocket.feature.installation.TouchDrawings
 import app.com.tmlpocket.R
 import app.com.tmlpocket.core.platform.AndroidBridge
 import app.com.tmlpocket.core.platform.NativeCoreClr
-import app.com.tmlpocket.feature.installation.MobileTerrariaConverter
 import app.com.tmlpocket.feature.launcher.LauncherSettings
 import app.com.tmlpocket.feature.patches.PatchRepository
 import app.com.tmlpocket.feature.renderers.AndroidRendererPluginPackageSource
@@ -17,6 +17,7 @@ import app.com.tmlpocket.feature.renderers.RendererSelection
 import java.io.File
 
 object GameRuntime {
+    const val THREAD_STACK_BYTES = 8L * 1024 * 1024
     private const val TAG = "tMLPocketCoreClr"
     private val cryptoLoadLock = Any()
     private var cryptoLibraryLoaded = false
@@ -40,24 +41,20 @@ object GameRuntime {
         setEnvironment("TML_ANDROID", "1")
         val patchRepository = PatchRepository(File(context.filesDir, "patches"))
         setEnvironment("TML_MOBILE_PATCHES", patchRepository.enabledBuiltinIds().joinToString(","))
-        val renderScale = LauncherSettings(context).read().optInt("renderScale", 100)
-        setEnvironment(
-            "TML_MOBILE_RENDER_SCALE",
-            when (renderScale) {
-                50 -> "0.5"
-                75 -> "0.75"
-                else -> "1.0"
-            },
-        )
         setEnvironment("TML_ANDROID_GAME_ROOT", prepared.workingDirectory)
         setEnvironment("TML_TMODLOADER_ASSEMBLY", prepared.tmlAssembly)
         setEnvironment("TML_ANDROID_CONTENT", prepared.contentDirectory)
         setEnvironment("TML_ANDROID_TERRARIA_ROOT", prepared.terrariaDirectory)
-        val controlArt = runCatching {
-            MobileTerrariaConverter.prepareControlArt(context, File(prepared.terrariaDirectory))
-        }.onFailure { Log.w(TAG, "Mobile Terraria control art is unavailable", it) }.getOrNull()
-        setEnvironment("TML_MOBILE_CONTROL_ART", controlArt?.absolutePath.orEmpty())
+        setEnvironment("TML_MOBILE_CONTROL_ART", prepared.controlArtDirectory)
+        setEnvironment("TML_DRAWN_CONTROL_ART", TouchDrawings.load(context).prepareGame(context, prepared.controlArtDirectory).absolutePath)
         setEnvironment("TML_ANDROID_CACHE", context.cacheDir.absolutePath)
+        val preferences = LauncherSettings(context).read()
+        // CoreCLR parses this setting as a hexadecimal byte count before creating managed threads.
+        setEnvironment("DOTNET_Thread_DefaultStackSize", THREAD_STACK_BYTES.toString(16))
+        Log.i(TAG, "Game thread stack: ${THREAD_STACK_BYTES / (1024 * 1024)} MiB")
+        val renderResolution = preferences.optInt("renderResolutionPercent", 100)
+        setEnvironment("TML_RENDER_RESOLUTION_PERCENT", renderResolution.toString())
+        setEnvironment("TML_FIXED_2400_1080", if (preferences.optBoolean("fixed1080p")) "1" else "0")
         setEnvironment("FNA_PLATFORM_BACKEND", "SDL2")
         setEnvironment("FNA3D_OPENGL_FORCE_ES3", "1")
         setEnvironment("FNA3D_FORCE_DRIVER", "OpenGL")

@@ -15,7 +15,9 @@ internal static class UiTextureAssets
     private static readonly Dictionary<string, string> Aliases =
         JsonConvert.DeserializeObject<Dictionary<string, string>>(ReadText("Assets/asset-aliases.json"));
     internal static string Root => Environment.GetEnvironmentVariable("TML_MOBILE_CONTROL_ART");
-    internal static bool Available => Directory.Exists(Root);
+    private static readonly string DrawnRoot = Environment.GetEnvironmentVariable("TML_DRAWN_CONTROL_ART");
+    private static readonly Dictionary<string, string> Paths = new(StringComparer.Ordinal);
+    internal static bool Available => Directory.Exists(DrawnRoot) || Directory.Exists(Root);
 
     internal static Stream Open(string name)
     {
@@ -32,7 +34,9 @@ internal static class UiTextureAssets
     private static string Resolve(string path)
     {
         var name = path.StartsWith(Prefix, StringComparison.Ordinal) ? path[Prefix.Length..] : path;
-        return Path.Combine(Root, Aliases.GetValueOrDefault(name, name) + ".rawimg");
+        if (Paths.TryGetValue(name, out var cached)) return cached;
+        var original = string.IsNullOrEmpty(Root) ? null : Path.Combine(Root, Aliases.GetValueOrDefault(name, name) + ".rawimg");
+        return Paths[name] = File.Exists(original) ? original : Path.Combine(DrawnRoot ?? string.Empty, name + ".rawimg");
     }
 
     internal static bool HasAsset(string path)
@@ -52,5 +56,6 @@ internal static class UiTextureAssets
     {
         foreach (var asset in Textures.Values) asset.Dispose();
         Textures.Clear();
+        Paths.Clear();
     }
 }

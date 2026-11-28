@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Badge, Button, EmptyState, Icon } from '../../components/ui';
+import { LabeledSelect } from '../../components/form-controls';
+import { Badge, Button, EmptyState } from '../../components/ui';
 import { useTranslation } from '../../i18n';
 import { nativeRequest } from '../../native/bridge';
 import { useLauncher } from '../../state/launcher';
@@ -12,6 +13,8 @@ export function NativeVersionManager({ compact = false }: { compact?: boolean })
   const [failure, setFailure] = useState<Error | string>();
   const failureMessage = failure instanceof Error ? failure.message : failure && t(failure);
   const versions = nativeState?.installedVersions || [];
+  const selected = versions.find((version) => version.active && version.available);
+  const available = versions.filter((version) => version.available);
   const busy = !!pending || !!nativeState?.busy;
   const run = async (method: 'versions.select' | 'versions.uninstall', id: string) => {
     if (busy) return;
@@ -47,6 +50,19 @@ export function NativeVersionManager({ compact = false }: { compact?: boolean })
     <div className="native-versions" aria-label={t('tML 版本管理')} aria-busy={busy}>
       {versions.length ? (
         <>
+          {available.length > 0 && (
+            <LabeledSelect
+              className="version-selector"
+              label={t('切换 tModLoader 启动版本')}
+              value={selected?.id ?? ''}
+              options={[
+                ...(!selected ? ([['', t('选择版本'), true]] as const) : []),
+                ...available.map((version) => [version.id, version.version] as const),
+              ]}
+              disabled={busy || (!!selected && available.length === 1)}
+              onChange={(id) => void run('versions.select', id)}
+            />
+          )}
           <p className="version-hint">
             {t('共 {count} 个版本 · 模组需与所选 tML 版本兼容。', {
               count: versions.length.toLocaleString(locale),
@@ -57,7 +73,7 @@ export function NativeVersionManager({ compact = false }: { compact?: boolean })
               <div className="version-item" key={version.id} data-version-id={version.id}>
                 <div className="version-summary">
                   <span className="resource-icon">
-                    <Icon name="game" />
+                    <img src="/tmodloader.png" alt="" width={40} height={40} />
                   </span>
                   <div className="resource-copy">
                     <h3>{version.version}</h3>

@@ -11,6 +11,7 @@ internal sealed class SteamSession : IAuthenticator, IDisposable
     private const uint Terraria = 105600;
     private static readonly SteamRoute[] Routes = [new(ProtocolTypes.WebSocket), new(ProtocolTypes.Tcp),
         new(ProtocolTypes.WebSocket, true), new(ProtocolTypes.Tcp, true)];
+    private SteamRoute workshopRoute = new(ProtocolTypes.WebSocket, true);
     private readonly Func<SteamRoute, ISteamConnection> connectionFactory;
     private readonly Func<CancellationToken, Task> retryDelay;
     private readonly object sync = new();
@@ -308,18 +309,23 @@ internal sealed class SteamSession : IAuthenticator, IDisposable
         if (!signedOut)
             throw new InvalidOperationException("Steam 会话当前不可用，请恢复连接后重试工坊操作");
 
+        SteamRoute first;
+        lock (sync) first = workshopRoute;
+        var routes = Routes.Prepend(first).Distinct().ToArray();
         Exception? lastFailure = null;
-        for (var index = 0; index < Routes.Length; index++)
+        for (var index = 0; index < routes.Length; index++)
         {
             ct.ThrowIfCancellationRequested();
-            using var anonymous = connectionFactory(Routes[index]);
+            var route = routes[index];
+            using var anonymous = connectionFactory(route);
             try
             {
                 await anonymous.ConnectAsync(ct);
                 await anonymous.LogOnAnonymousAsync(ct);
+                lock (sync) workshopRoute = route;
                 return await operation(anonymous, ct);
             }
-            catch (Exception failure) when (IsTransient(failure) && index < Routes.Length - 1 && !ct.IsCancellationRequested)
+            catch (Exception failure) when (IsTransient(failure) && index < routes.Length - 1 && !ct.IsCancellationRequested)
             {
                 lastFailure = failure;
             }
@@ -327,7 +333,7 @@ internal sealed class SteamSession : IAuthenticator, IDisposable
         throw new IOException("Steam 匿名工坊连接失败，请登录 Steam 后重试", lastFailure);
     }
 
-    public async Task<string> DownloadAsync(string root, Action<string, int> progress, CancellationToken ct)
+    public async Task<string> DownloadAsync(string root, Action<string, int> progress, CancellationToken ct, string? installedContent = null)
     {
         await VerifyOwnershipAsync(ct);
         SteamClient client;
@@ -342,9 +348,7 @@ internal sealed class SteamSession : IAuthenticator, IDisposable
         var product = await apps.PICSGetProductInfo(new SteamApps.PICSRequest(Terraria, access), null).ToTask().WaitAsync(ct);
         var app = (product.Results ?? throw new IOException("Steam 未返回应用清单")).SelectMany(r => r.Apps).First(p => p.Key == Terraria).Value.KeyValues;
         var content = client.GetHandler<SteamContent>()!;
-        var servers = (await content.GetServersForSteamPipe(client.CellID, 20).WaitAsync(ct))
-            .Where(s => s.Type is "CDN" or "SteamCache" && !s.UseAsProxy).Take(8).ToArray();
-        if (servers.Length == 0) throw new IOException("Steam 未返回可用内容服务器");
+        var servers = await SteamCdnPool.CreateAsync(client, Terraria, ct);
         using var cdn = new Client(client);
         var directory = Path.Combine(root, "steam-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
@@ -363,7 +367,7 @@ internal sealed class SteamSession : IAuthenticator, IDisposable
                 if (key.Result != EResult.OK) throw new IOException($"Steam 无权下载资源库 {id}：{key.Result}");
                 var code = await content.GetManifestRequestCode(id, Terraria, manifestId).WaitAsync(ct);
                 if (code == 0) throw new IOException("Steam 未授予清单访问权限");
-                var manifest = await WithServerAsync(servers, content, Terraria, id,
+                var manifest = await servers.FetchAsync(id,
                     (server, auth) => cdn.DownloadManifestAsync(id, manifestId, code, server, key.DepotKey, cdnAuthToken: auth), ct);
                 selected.Add((id, key.DepotKey, manifest));
             }
@@ -375,55 +379,69 @@ internal sealed class SteamSession : IAuthenticator, IDisposable
             var total = files.Aggregate(0UL, (n, f) => checked(n + f.File.TotalSize));
             if (total == 0 || total > 8UL * 1024 * 1024 * 1024) throw new InvalidDataException("Steam 资源清单为空或过大");
             ulong done = 0;
-            foreach (var item in files)
+            int verified = 0;
+            var progressLock = new object();
+            void Report(ulong received, bool fileComplete)
             {
-                ct.ThrowIfCancellationRequested();
-                var file = StoreFiles.Target(directory, StoreFiles.ContentPath(item.File.FileName) ?? StoreFiles.VersionProbePath(item.File.FileName)!);
+                lock (progressLock)
+                {
+                    done += received;
+                    if (fileComplete) verified++;
+                    progress(FormattableString.Invariant($"Steam：已处理 {done / 1048576d:F2}/{total / 1048576d:F2} MiB · 已校验 {verified}/{files.Length} 个文件"),
+                        (int)(done * 85 / total));
+                }
+            }
+
+            // Depots can overlay a path. Preserve manifest order for that path while fetching unrelated files together.
+            var destinations = files.GroupBy(item => StoreFiles.Target(directory,
+                StoreFiles.ContentPath(item.File.FileName) ?? StoreFiles.VersionProbePath(item.File.FileName)!),
+                OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+                .OrderByDescending(group => group.Max(item => item.File.TotalSize));
+            await Parallel.ForEachAsync(destinations, new ParallelOptions { MaxDegreeOfParallelism = 8, CancellationToken = ct },
+                async (destination, token) =>
+            {
+                foreach (var item in destination)
+                    await DownloadFileAsync(destination.Key, item.Id, item.Key, item.File, token);
+            });
+
+            async Task DownloadFileAsync(string file, uint depot, byte[] key, DepotManifest.FileData entry, CancellationToken token)
+            {
+                token.ThrowIfCancellationRequested();
+                var relative = StoreFiles.ContentPath(entry.FileName);
+                if (installedContent != null && relative != null && await StoreFiles.TryReuseContentAsync(
+                    installedContent, relative, file, entry.TotalSize, entry.FileHash, token))
+                {
+                    Report(entry.TotalSize, true);
+                    return;
+                }
                 await using (var output = File.Create(file))
                 {
-                    output.SetLength(checked((long)item.File.TotalSize));
-                    foreach (var chunk in item.File.Chunks.OrderBy(c => c.Offset))
+                    output.SetLength(checked((long)entry.TotalSize));
+                    foreach (var chunk in entry.Chunks.OrderBy(c => c.Offset))
                     {
-                        ct.ThrowIfCancellationRequested();
-                        if (chunk.UncompressedLength > 16 * 1024 * 1024 || chunk.Offset + chunk.UncompressedLength > item.File.TotalSize)
+                        token.ThrowIfCancellationRequested();
+                        if (chunk.UncompressedLength > 16 * 1024 * 1024 || chunk.Offset > entry.TotalSize || chunk.UncompressedLength > entry.TotalSize - chunk.Offset)
                             throw new InvalidDataException("Steam 分块长度超出文件范围");
-                        var bytes = new byte[chunk.UncompressedLength];
-                        var count = await WithServerAsync(servers, content, Terraria, item.Id,
-                            (server, auth) => cdn.DownloadDepotChunkAsync(item.Id, chunk, server, bytes, item.Key, cdnAuthToken: auth), ct);
+                        var bytes = await servers.FetchAsync(depot, async (server, auth) =>
+                        {
+                            var buffer = new byte[chunk.UncompressedLength];
+                            var count = await cdn.DownloadDepotChunkAsync(depot, chunk, server, buffer, key, cdnAuthToken: auth);
+                            if (count != buffer.Length) throw new InvalidDataException("Steam 文件分块下载不完整");
+                            return buffer;
+                        }, token);
                         output.Position = checked((long)chunk.Offset);
-                        await output.WriteAsync(bytes.AsMemory(0, count), ct);
-                        done += (uint)count;
-                        progress($"Steam：下载资源 {done / 1048576}/{total / 1048576} MB", (int)(done * 85 / total));
+                        await output.WriteAsync(bytes, token);
+                        Report((uint)bytes.Length, false);
                     }
                 }
-                await StoreFiles.VerifySha1Async(file, item.File.FileHash, ct);
+                await StoreFiles.VerifySha1Async(file, entry.FileHash, token);
+                Report(0, true);
             }
             progress("Steam：校验完成，正在准备安装…", 90);
             await StoreFiles.PreserveVersionAsync(directory, null, ct);
             return await StoreFiles.PackageAsync(directory, ct);
         }
         finally { Directory.Delete(directory, true); }
-    }
-
-    internal static async Task<T> WithServerAsync<T>(Server[] servers, SteamContent content, uint appId, uint depot, Func<Server, string?, Task<T>> download, CancellationToken ct)
-    {
-        Exception? last = null;
-        foreach (var server in servers)
-        {
-            ct.ThrowIfCancellationRequested();
-            try
-            {
-                try { return await download(server, null).WaitAsync(TimeSpan.FromSeconds(60), ct); }
-                catch (SteamKitWebRequestException error) when (error.StatusCode == System.Net.HttpStatusCode.Forbidden)
-                {
-                    var token = await content.GetCDNAuthToken(appId, depot, server.Host ?? throw new IOException("Steam CDN 地址无效")).WaitAsync(ct);
-                    if (token.Result != EResult.OK) throw new IOException("Steam CDN 授权失败");
-                    return await download(server, token.Token).WaitAsync(TimeSpan.FromSeconds(60), ct);
-                }
-            }
-            catch (Exception error) when (error is not OperationCanceledException) { last = error; }
-        }
-        throw new IOException("Steam 内容服务器下载失败，请重试", last);
     }
 
     internal static string SafeError(Exception error) => error switch

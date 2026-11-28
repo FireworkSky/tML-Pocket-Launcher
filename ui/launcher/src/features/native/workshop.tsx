@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Badge, Button, EmptyState, Icon } from '../../components/ui';
+import { LabeledSelect } from '../../components/form-controls';
 import { nativeRequest } from '../../native/bridge';
 import { useLauncher } from '../../state/launcher';
 import { useNativeActions } from './actions';
+import { useSteam } from './steam/state';
 import { useDownloads } from './download-state';
 import { NativeField } from './controls';
 import { ResourceBrowserLayout, ResourceSearch } from './resource-layout';
@@ -41,6 +43,7 @@ interface WorkshopPage {
 }
 
 const WORKSHOP_PAGE_SIZE = 20;
+let modFrontPage: { scope: string; expires: number; value: WorkshopPage } | undefined;
 
 function WorkshopPreview({ item }: { item: WorkshopItem }) {
   const [failedUrl, setFailedUrl] = useState<string>();
@@ -136,6 +139,9 @@ export function NativeWorkshopCatalog({ appId }: { appId: WorkshopApp }) {
   const { nativeState, notify } = launcher;
   const { importInfo } = useNativeActions(launcher);
   const downloads = useDownloads();
+  const { account } = useSteam();
+  const scope = account ? JSON.stringify([account.phase, account.account]) : undefined;
+  const opened = useRef(false);
   const [query, setQuery] = useState('');
   const [projectId, setProjectId] = useState('');
   const [sort, setSort] = useState<SortMode>('popular');
@@ -175,7 +181,7 @@ export function NativeWorkshopCatalog({ appId }: { appId: WorkshopApp }) {
   );
 
   const search = useCallback(
-    async (nextPage = 1, sortOverride = sort, daysOverride = days) => {
+    async (nextPage = 1, sortOverride = sort, daysOverride = days, useCache = false) => {
       if (loading || loadingMore || nativeState?.busy) return;
       const append = nextPage > 1;
       const filters = append
@@ -196,11 +202,18 @@ export function NativeWorkshopCatalog({ appId }: { appId: WorkshopApp }) {
       setFailure(undefined);
       if (!append) setDetail(null);
       try {
-        const value = await nativeRequest<WorkshopPage>('workshop.query', {
+        const frontPage = !append && filters.appId === 1281930 && !filters.search &&
+          !filters.category && !filters.version && !filters.language && filters.sort === 'popular' && filters.days === 90;
+        const cached = useCache && frontPage && scope && modFrontPage?.scope === scope &&
+          modFrontPage.expires > Date.now() ? modFrontPage.value : undefined;
+        const value = cached ?? await nativeRequest<WorkshopPage>('workshop.query', {
           ...filters,
           page: nextPage,
           pageSize: WORKSHOP_PAGE_SIZE,
         });
+        if (frontPage && scope && !cached) {
+          modFrontPage = { scope, expires: Date.now() + 5 * 60_000, value };
+        }
         if (token === generation.current) {
           activeQuery.current = filters;
           setResult((previous) => {
@@ -232,10 +245,20 @@ export function NativeWorkshopCatalog({ appId }: { appId: WorkshopApp }) {
       loadingMore,
       nativeState?.busy,
       query,
+      scope,
       sort,
       version,
     ],
   );
+
+  useEffect(() => {
+    if (appId !== 1281930 || opened.current || nativeState?.busy) return;
+    const timer = window.setTimeout(() => {
+      opened.current = true;
+      void search(1, 'popular', 90, true);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [appId, nativeState?.busy, search]);
 
   const openDetail = async (item: WorkshopItem) => {
     if (loading || loadingMore || nativeState?.busy) return;
@@ -288,6 +311,12 @@ export function NativeWorkshopCatalog({ appId }: { appId: WorkshopApp }) {
   ];
   const dependencyIds = detail?.dependencyIds ?? [];
   const isLoading = loading || loadingMore || nativeState?.busy;
+  const categoryOptions =
+    appId === 1281930
+      ? TML_CATEGORIES.map((item) => [item, item] as const)
+      : resourceType === 'worlds'
+        ? TERRARIA_WORLD_CATEGORIES
+        : TERRARIA_PACK_CATEGORIES;
 
   const filters = (
     <>
@@ -310,69 +339,43 @@ export function NativeWorkshopCatalog({ appId }: { appId: WorkshopApp }) {
         </Button>
       </form>
       {appId === 105600 && (
-        <label className="workshop-category-filter">
-          <span>{t('资源类型')}</span>
-          <select
-            aria-label={t('资源类型')}
-            value={resourceType}
-            onChange={(event) => {
-              setResourceType(event.target.value as 'worlds' | 'packs');
-              setCategory('');
-            }}
-          >
-            <option value="worlds">{t('世界')}</option>
-            <option value="packs">{t('资源包')}</option>
-          </select>
-        </label>
+        <LabeledSelect
+          className="workshop-category-filter"
+          label={t('资源类型')}
+          value={resourceType}
+          onChange={(value) => {
+            setResourceType(value as 'worlds' | 'packs');
+            setCategory('');
+          }}
+          options={[
+            ['worlds', t('世界')],
+            ['packs', t('资源包')],
+          ]}
+        />
       )}
-      <label className="workshop-category-filter">
-        <span>{categoryLabel}</span>
-        <select
-          aria-label={categoryLabel}
-          value={category}
-          onChange={(event) => setCategory(event.target.value)}
-        >
-          <option value="">{t('全部内容')}</option>
-          {(appId === 1281930
-            ? TML_CATEGORIES.map((item) => [item, item] as const)
-            : resourceType === 'worlds'
-              ? TERRARIA_WORLD_CATEGORIES
-              : TERRARIA_PACK_CATEGORIES
-          ).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
-      </label>
+      <LabeledSelect
+        className="workshop-category-filter"
+        label={categoryLabel}
+        value={category}
+        onChange={setCategory}
+        options={[['', t('全部内容')], ...categoryOptions]}
+      />
       {appId === 1281930 && (
         <>
-          <label className="workshop-category-filter">
-            <span>{t('tModLoader 版本')}</span>
-            <select
-              aria-label={t('tModLoader 版本')}
-              value={version}
-              onChange={(event) => setVersion(event.target.value)}
-            >
-              <option value="">{t('全部版本')}</option>
-              {TML_VERSIONS.map((item) => (
-                <option key={item}>{item}</option>
-              ))}
-            </select>
-          </label>
-          <label className="workshop-category-filter">
-            <span>{t('模组语言')}</span>
-            <select
-              aria-label={t('模组语言')}
-              value={language}
-              onChange={(event) => setLanguage(event.target.value)}
-            >
-              <option value="">{t('全部语言')}</option>
-              {TML_LANGUAGES.map((item) => (
-                <option key={item}>{item}</option>
-              ))}
-            </select>
-          </label>
+          <LabeledSelect
+            className="workshop-category-filter"
+            label={t('tModLoader 版本')}
+            value={version}
+            onChange={setVersion}
+            options={[['', t('全部版本')], ...TML_VERSIONS.map((item) => [item, item] as const)]}
+          />
+          <LabeledSelect
+            className="workshop-category-filter"
+            label={t('模组语言')}
+            value={language}
+            onChange={setLanguage}
+            options={[['', t('全部语言')], ...TML_LANGUAGES.map((item) => [item, item] as const)]}
+          />
         </>
       )}
       <form
@@ -405,6 +408,7 @@ export function NativeWorkshopCatalog({ appId }: { appId: WorkshopApp }) {
 
   return (
     <ResourceBrowserLayout
+      compactFilters={appId === 1281930}
       title={title}
       summary={
         detail
@@ -415,44 +419,28 @@ export function NativeWorkshopCatalog({ appId }: { appId: WorkshopApp }) {
       }
       toolbar={
         <div className="workshop-sort-tabs" aria-label={t('工坊排序')}>
-          <label>
-            <span>{t('排序顺序')}</span>
-            <select
-              aria-label={t('排序顺序')}
-              value={sort}
-              disabled={isLoading}
-              onChange={(event) => {
-                const value = event.target.value as SortMode;
-                setSort(value);
-                void search(1, value);
-              }}
-            >
-              {SORTS.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {t(item.label)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>{t('时间范围')}</span>
-            <select
-              aria-label={t('时间范围')}
-              value={days}
-              disabled={isLoading}
-              onChange={(event) => {
-                const value = Number(event.target.value);
-                setDays(value);
-                void search(1, sort, value);
-              }}
-            >
-              {DAY_RANGES.map(([value, label]) => (
-                <option key={value} value={value}>
-                  {t(label)}
-                </option>
-              ))}
-            </select>
-          </label>
+          <LabeledSelect
+            label={t('排序顺序')}
+            value={sort}
+            disabled={isLoading}
+            onChange={(selection) => {
+              const value = selection as SortMode;
+              setSort(value);
+              void search(1, value);
+            }}
+            options={SORTS.map((item) => [item.id, t(item.label)])}
+          />
+          <LabeledSelect
+            label={t('时间范围')}
+            value={String(days)}
+            disabled={isLoading}
+            onChange={(selection) => {
+              const value = Number(selection);
+              setDays(value);
+              void search(1, sort, value);
+            }}
+            options={DAY_RANGES.map(([value, label]) => [String(value), t(label)])}
+          />
         </div>
       }
       filters={filters}
@@ -621,7 +609,10 @@ export function NativeWorkshopCatalog({ appId }: { appId: WorkshopApp }) {
           )}
         </div>
       )}
-      {!detail && !result && !loading && (
+      {appId === 1281930 && failureMessage && !detail && !result && !loading && (
+        <Button disabled={isLoading} onClick={() => void search()}>{t('重试')}</Button>
+      )}
+      {appId === 105600 && !detail && !result && !loading && (
         <EmptyState
           symbol="mod"
           title={t('浏览 Steam 创意工坊')}

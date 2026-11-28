@@ -94,15 +94,10 @@
   color: var(--muted);
   font-size: 12px;
 }
-.workshop-sort-tabs select {
+.workshop-sort-tabs .select-trigger {
   min-width: 0;
   min-height: 36px;
-  padding: 0 30px 0 10px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--surface);
-  color: var(--strong);
-  font: inherit;
+  padding-inline: 10px;
   font-size: 12px;
 }
 .workshop-search-form {
@@ -152,14 +147,10 @@
   color: var(--muted);
   font-size: 12px;
 }
-.workshop-category-filter select {
+.workshop-category-filter .select-trigger {
   width: 100%;
+  min-width: 0;
   min-height: 44px;
-  padding: 0 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  color: var(--strong);
-  background: var(--surface);
 }
 .workshop-results-grid {
   display: grid;
@@ -182,18 +173,21 @@
   cursor: pointer;
 }
 .workshop-item-image {
+  --workshop-thumbnail-size: 60px;
   display: grid;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
   place-items: center;
-  width: 72px;
-  height: 54px;
-  flex: 0 0 72px;
+  width: var(--workshop-thumbnail-size);
+  height: var(--workshop-thumbnail-size);
+  flex: 0 0 var(--workshop-thumbnail-size);
   overflow: hidden;
   background: var(--surface);
 }
 .workshop-item-image img {
+  display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 .workshop-item-image svg {
   width: 28px;
@@ -396,8 +390,7 @@
   align-items: center;
   justify-content: center;
   border-radius: 16px;
-  background: var(--accent-soft);
-  color: var(--accent-ink);
+  color: var(--muted);
 }
 .resource-cover img {
   width: 46px;
@@ -608,11 +601,52 @@
     font-size: 14px;
   }
 }
+/* The mod catalog reserves space for the filter column only while it is open. */
+.workshop-compact {
+  gap: 8px 12px;
+}
+.workshop-compact .resource-browser-filters > summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.workshop-compact summary > svg {
+  width: 16px;
+  height: 16px;
+}
+.workshop-compact .resource-browser-filters[open] > summary > svg:last-child {
+  transform: rotate(90deg);
+}
+.workshop-compact .resource-filter-body {
+  gap: 8px;
+}
+.workshop-compact .workshop-category-filter {
+  gap: 3px;
+}
+.workshop-compact .workshop-item-image {
+  --workshop-thumbnail-size: 46px;
+}
+@container (min-width: 660px) {
+  .workshop-compact {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .workshop-compact .resource-browser-filters:not([open]) {
+    grid-row: 1;
+  }
+  .workshop-compact[data-filters-open="false"] .resource-browser-results {
+    grid-column: 1 / -1;
+  }
+  .workshop-compact .resource-browser-filters[open] {
+    width: clamp(190px, 22cqi, 232px);
+  }
+}
 @media (max-width: 480px) {
   .workshop-item-image {
-    width: 60px;
-    height: 48px;
-    flex-basis: 60px;
+    --workshop-thumbnail-size: 48px;
   }
   .workshop-sort-tabs {
     gap: 12px;

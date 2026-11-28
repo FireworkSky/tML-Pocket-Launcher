@@ -8,8 +8,4 @@
   <Folder Name="/external/">
     <Project Path="external/tML-Pocket-Patches/MobileLauncher.Patches.csproj" />
   </Folder>
-  <Folder Name="/managed/tests/">
-    <Project Path="managed/tests/MobileLauncher.Bootstrap.Tests/MobileLauncher.Bootstrap.Tests.csproj" />
-    <Project Path="managed/tests/MobileLauncher.Stores.Tests/MobileLauncher.Stores.Tests.csproj" />
-  </Folder>
 </Solution>

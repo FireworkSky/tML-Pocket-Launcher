@@ -30,6 +30,7 @@ export interface DialogSpec {
   description: string;
   body?: ReactNode;
   actions?: ReactNode;
+  onDismiss?: () => void;
   drawer?: boolean;
   prototype?: boolean;
   surface?: 'files' | 'download';
@@ -50,7 +51,7 @@ export const resourceDestinations = [
   { id: 'resource-packs', label: '模组包', symbol: 'folder' },
 ] as const;
 export type ResourceWorkspace = (typeof resourceDestinations)[number]['id'];
-export type NativeWorkspace = 'steam-login' | 'steam-library' | 'downloads' | ResourceWorkspace;
+export type NativeWorkspace = 'steam-login' | 'steam-library' | 'downloads' | 'control-packs' | ResourceWorkspace;
 export function isResourceWorkspace(
   workspace: NativeWorkspace | null,
 ): workspace is ResourceWorkspace {
@@ -60,6 +61,7 @@ export const workspaceNames: Record<NativeWorkspace, string> = {
   'steam-login': 'Steam',
   'steam-library': 'Steam',
   downloads: '下载',
+  'control-packs': '控制布局包',
   'resource-versions': '下载 - 游戏',
   'resource-mods': '下载 - 模组',
   'resource-assets': '下载 - 资源',
@@ -105,7 +107,7 @@ function initialState(): LauncherState {
     gameTab: 'installed',
     modTab: new URLSearchParams(location.search).get('tab') === 'browse' ? 'browse' : 'installed',
     patchTab: 'builtin',
-    settingsTab: 'appearance',
+    settingsTab: nativeMode && location.hash === '#settings/control-packs' ? 'control-management' : 'appearance',
     localQuery: '',
     localFilter: 'all',
     localSort: 'name',
@@ -149,6 +151,7 @@ export function LauncherProvider({ children }: { children: ReactNode }) {
   const motionEnabled = pointer && state.preferences.motion && !systemReduced;
   const returnFocus = useRef<HTMLElement | null>(null);
   const dialogOpen = useRef(false);
+  const dismissAction = useRef<DialogSpec['onDismiss']>(undefined);
   const nextId = useRef(0);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const update = useCallback<Update>((updater) => setState(updater), []);
@@ -175,11 +178,15 @@ export function LauncherProvider({ children }: { children: ReactNode }) {
     [record],
   );
   const closeDialog = useCallback((restore = true) => {
+    dismissAction.current?.();
+    dismissAction.current = undefined;
     dialogOpen.current = false;
     if (!restore) returnFocus.current = null;
     setDialog((current) => (current ? { ...current, open: false } : null));
   }, []);
   const openDialog = useCallback((spec: DialogSpec) => {
+    dismissAction.current?.();
+    dismissAction.current = spec.onDismiss;
     if (!dialogOpen.current)
       returnFocus.current =
         document.activeElement instanceof HTMLElement ? document.activeElement : null;

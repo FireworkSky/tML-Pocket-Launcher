@@ -12,10 +12,12 @@ import {
 import { useTranslation } from '../../i18n';
 import { useLauncher } from '../../state/launcher';
 import { nativeRequest } from '../../native/bridge';
+import type { NativeMod } from '../../native/models';
 import { ModDependencies } from './mod-dependencies';
+import { ModSortSelect, compareInstalledMods } from '../mod-sort';
 
 export function NativeModsPage() {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const { state, update, nativeState, openDialog, closeDialog, openWorkspace } = useLauncher();
   useEffect(() => {
     if (state.modTab !== 'browse') return;
@@ -26,26 +28,36 @@ export function NativeModsPage() {
   const [filter, setFilter] = useState('all');
   const [icons, setIcons] = useState<Record<string, string>>({});
   const requestedIcons = useRef(new Set<string>());
+  const iconKey = (mod: NativeMod) =>
+    JSON.stringify([nativeState?.activeInstance, mod.id, mod.version, mod.size, mod.changed]);
   const mods = nativeState?.mods || [];
-  const filteredMods = mods.filter(
-    (mod) =>
-      `${mod.title} ${mod.author} ${mod.id}`.toLowerCase().includes(query.trim().toLowerCase()) &&
-      (filter === 'all' || (filter === 'enabled' ? mod.enabled : !mod.enabled)),
-  );
+  const normalizedQuery = query.trim().toLocaleLowerCase(locale);
+  const filteredMods = mods
+    .filter(
+      (mod) =>
+        `${mod.title} ${mod.author || ''} ${mod.id}`
+          .toLocaleLowerCase(locale)
+          .includes(normalizedQuery) &&
+        (filter === 'all' || (filter === 'enabled' ? mod.enabled : !mod.enabled)),
+    )
+    .sort(compareInstalledMods(state.localSort, locale));
   useEffect(() => {
     const pending = filteredMods
-      .filter((mod) => !mod.error && !requestedIcons.current.has(mod.id))
+      .filter((mod) => !mod.error && !requestedIcons.current.has(iconKey(mod)))
       .slice(0, 24);
     if (!pending.length) return;
-    pending.forEach((mod) => requestedIcons.current.add(mod.id));
+    pending.forEach((mod) => requestedIcons.current.add(iconKey(mod)));
     void nativeRequest<Record<string, string>>('mods.icons', {
       ids: pending.map((mod) => mod.id),
     })
       .then((loaded) => {
-        setIcons((current) => ({ ...current, ...loaded }));
+        setIcons((current) => ({
+          ...current,
+          ...Object.fromEntries(pending.filter((mod) => loaded[mod.id]).map((mod) => [iconKey(mod), loaded[mod.id]])),
+        }));
       })
       .catch(() => {
-        pending.forEach((mod) => requestedIcons.current.delete(mod.id));
+        pending.forEach((mod) => requestedIcons.current.delete(iconKey(mod)));
       });
   }, [filteredMods, nativeState?.busy]);
   const run = (method: string, params: object = {}) =>
@@ -100,6 +112,7 @@ export function NativeModsPage() {
             </Button>
           ))}
         </div>
+        <ModSortSelect />
         <IconButton
           symbol="sliders"
           label={t('模组批量操作')}
@@ -136,7 +149,7 @@ export function NativeModsPage() {
         <EmptyState
           symbol="mod"
           title={t('还没有模组')}
-          description={t('使用右上角「添加模组」下载或导入 .tmod 文件。')}
+          description={t('使用右上角「添加模组」下载或导入游戏模组。')}
         />
       ) : !filteredMods.length ? (
         <EmptyState
@@ -158,7 +171,7 @@ export function NativeModsPage() {
           {filteredMods.map((mod) => (
             <div className="resource-row native-mod-row" key={mod.id}>
               <span className="resource-icon">
-                {icons[mod.id] ? <img src={icons[mod.id]} alt="" /> : <Icon name="mod" />}
+                {icons[iconKey(mod)] ? <img src={icons[iconKey(mod)]} alt="" /> : <Icon name="mod" />}
               </span>
               <div className="resource-copy">
                 <h3>

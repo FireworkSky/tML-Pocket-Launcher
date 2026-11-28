@@ -1,8 +1,10 @@
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Runtime.Loader;
 using MobileLauncher.Bootstrap.Compatibility;
 using MobileLauncher.Bootstrap.Platform;
 using MonoMod.RuntimeDetour;
+using MonoMod.Utils;
 
 namespace MobileLauncher.Bootstrap.Runtime;
 
@@ -99,6 +101,7 @@ public sealed class TmlLoaderEntrypoint
             return;
         }
 
+        ConfigureMonoModArchitecture(RuntimeInformation.ProcessArchitecture);
         var loggingHooks = assembly.GetType("Terraria.ModLoader.Engine.LoggingHooks");
         var initialize = loggingHooks?.GetMethod(
             "Init",
@@ -114,6 +117,26 @@ public sealed class TmlLoaderEntrypoint
 
     private static void SkipUnsupportedAndroidLoggingHooks(Action original)
     {
+    }
+
+    private static void ConfigureMonoModArchitecture(Architecture processArchitecture)
+    {
+        var expected = processArchitecture switch
+        {
+            Architecture.Arm64 => ArchitectureKind.Arm64,
+            Architecture.X64 => ArchitectureKind.x86_64,
+            _ => throw new PlatformNotSupportedException($"Unsupported Android process architecture: {processArchitecture}")
+        };
+        var detected = PlatformDetection.Architecture;
+        if (detected == expected) return;
+
+        // The bundled MonoMod caches the kernel's platform string before creating
+        // its first PlatformTriple. The running CoreCLR knows its own instruction set.
+        var field = typeof(PlatformDetection).GetField("arch", BindingFlags.NonPublic | BindingFlags.Static);
+        if (field?.FieldType != typeof(ArchitectureKind))
+            throw new PlatformNotSupportedException($"Cannot correct MonoMod architecture {detected} to {expected}.");
+        field.SetValue(null, expected);
+        Console.WriteLine($"[MobileLauncher.Bootstrap] Corrected MonoMod architecture {detected} to {expected}.");
     }
 
     private static bool IsAndroidRuntime() => OperatingSystem.IsAndroid() ||

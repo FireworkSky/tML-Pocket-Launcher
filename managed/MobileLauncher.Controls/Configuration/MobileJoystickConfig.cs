@@ -12,6 +12,7 @@ public enum MobileHotbarOrientation { Vertical, Horizontal }
 public class MobileJoystickConfig
 {
 	internal const MobileControlLayoutMode DefaultControlLayout = MobileControlLayoutMode.Advanced;
+	private const int MaxProfileBytes = 2 * 1024 * 1024;
 
 	public static MobileJoystickConfig Instance { get; private set; }
 
@@ -26,7 +27,7 @@ public class MobileJoystickConfig
 		string path = File.Exists(ConfigPath) ? ConfigPath : legacy;
 		var config = new MobileJoystickConfig();
 		try {
-			if (File.Exists(path) && new FileInfo(path).Length <= 2 * 1024 * 1024)
+			if (File.Exists(path) && new FileInfo(path).Length <= MaxProfileBytes)
 				JsonConvert.PopulateObject(File.ReadAllText(path), config, new JsonSerializerSettings { MaxDepth = 40 });
 		}
 		catch (Exception error) when (error is IOException or JsonException) {
@@ -42,7 +43,9 @@ public class MobileJoystickConfig
 		Directory.CreateDirectory(Path.GetDirectoryName(path));
 		string temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
 		try {
-			File.WriteAllText(temporary, JsonConvert.SerializeObject(this, Formatting.Indented));
+			byte[] profile = System.Text.Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(this, Formatting.None));
+			if (profile.Length > MaxProfileBytes) throw new IOException("The mobile control profile exceeds 2 MiB.");
+			File.WriteAllBytes(temporary, profile);
 			File.Move(temporary, path, true);
 		}
 		finally { if (File.Exists(temporary)) File.Delete(temporary); }
@@ -57,6 +60,16 @@ public class MobileJoystickConfig
 	public bool EnableTouchInput { get; set; } = true;
 
 	public bool EnableMouseFallback { get; set; } = true;
+
+	private bool showMouseCursor;
+	public bool ShowMouseCursor {
+		get => showMouseCursor;
+		set {
+			showMouseCursor = value;
+			// The bundled FNA patch also guards cursor draws that bypass MobileJoystickSystem.
+			AppContext.SetSwitch("MobileLauncher.ShowMouseCursor", value);
+		}
+	}
 
 	public bool EnablePinchZoom { get; set; } = true;
 
@@ -114,6 +127,7 @@ public class MobileJoystickConfig
 
 	internal void Apply()
 	{
+		AppContext.SetSwitch("MobileLauncher.ShowMouseCursor", ShowMouseCursor);
 		EdgePadding = Math.Clamp(EdgePadding, 0, 96);
 		CursorSensitivity = Math.Clamp(CursorSensitivity, .25f, 3f);
 		CursorOpacity = Math.Clamp(CursorOpacity, .4f, 1f);

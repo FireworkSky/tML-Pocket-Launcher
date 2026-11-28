@@ -1,7 +1,10 @@
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
+using ReLogic.Localization.IME;
+using ReLogic.OS;
 using Terraria;
 using Terraria.GameContent.UI.States;
 using Terraria.GameInput;
@@ -15,6 +18,10 @@ public sealed class MobileTextInputSystem : MobileSystem
 {
     private static object owner;
     private static bool started;
+    private static bool manualKeyboard;
+
+    [DllImport("main", EntryPoint = "tml_pocket_bridge_take_keyboard_request")]
+    private static extern int TakeKeyboardRequest();
     private static bool readByField;
     private static ulong inputFrame, lastReadFrame;
     internal static bool AutoImeEnabled {
@@ -89,14 +96,12 @@ public sealed class MobileTextInputSystem : MobileSystem
     {
         owner = field;
         PlayerInput.WritingText = true;
-        Main.instance.HandleIME();
-        if (!AutoImeEnabled) { Stop(); return; }
-        if (bounds.Width > 0) TextInputEXT.SetInputRectangle(bounds);
-        // A focused field may be tapped again after Android hid the keyboard
-        // while SDL still reports an active session. Restart only on focus.
-        TextInputEXT.StopTextInput();
-        TextInputEXT.StartTextInput();
-        started = true;
+        if (!AutoImeEnabled) {
+            Main.instance.HandleIME();
+            Stop();
+            return;
+        }
+        RequestKeyboard(bounds);
     }
 
     internal static void FocusNativeField(Rectangle bounds)
@@ -106,12 +111,37 @@ public sealed class MobileTextInputSystem : MobileSystem
         readByField = true;
         lastReadFrame = inputFrame;
         PlayerInput.WritingText = true;
-        Main.instance.HandleIME();
+        RequestKeyboard(bounds);
+    }
+
+    private static void RequestKeyboard(Rectangle bounds)
+    {
         if (bounds.Width > 0) TextInputEXT.SetInputRectangle(bounds);
-        TextInputEXT.StopTextInput();
-        TextInputEXT.StartTextInput();
+        var ime = Platform.Get<IImeService>();
+        bool wasEnabled = ime.IsEnabled;
+        Main.instance.HandleIME();
+        // Re-arm ReLogic after a dismissal, even when Terraria's writing flag did not change.
+        if (wasEnabled || !ime.IsEnabled) ime.Enable();
+        if (!TextInputEXT.IsTextInputActive()) TextInputEXT.StartTextInput();
         started = true;
     }
+
+    internal static void ShowKeyboard()
+    {
+        // Open chat when playing without a focused text field so the IME has a recipient.
+        if (owner == null && !HasNativeTextField && !(readByField && inputFrame - lastReadFrame <= 3)
+            && !Main.gameMenu && !Main.ingameOptionsWindow && !Main.inFancyUI && !Main.mapFullscreen
+            && !Main.playerInventory && !Main.LocalPlayer.dead)
+            Main.OpenPlayerChat();
+
+        manualKeyboard = true;
+        PlayerInput.WritingText = true;
+        RequestKeyboard(default);
+    }
+
+    private static bool HasNativeTextField => Main.drawingPlayerChat || Main.editSign || Main.editChest
+        || Main.gameMenu && Main.MenuUI?.CurrentState is UIVirtualKeyboard
+        || Main.inFancyUI && Main.InGameUI?.CurrentState is UIVirtualKeyboard;
 
     internal static void Blur(object field)
     {
@@ -124,17 +154,18 @@ public sealed class MobileTextInputSystem : MobileSystem
     {
         if (started) TextInputEXT.StopTextInput();
         started = false;
+        manualKeyboard = false;
     }
 
     public override void PostUpdateInput()
     {
         if (Main.dedServ) return;
         inputFrame++;
-        if (MobileJoystickConfig.Instance?.EnableMobileControls != true || !AutoImeEnabled) { owner = null; readByField = false; Stop(); return; }
-        bool native = Main.drawingPlayerChat || Main.editSign || Main.editChest
-            || Main.gameMenu && Main.MenuUI?.CurrentState is UIVirtualKeyboard
-            || Main.inFancyUI && Main.InGameUI?.CurrentState is UIVirtualKeyboard;
-        if (Main.hasFocus && (owner != null || native || readByField && inputFrame - lastReadFrame <= 3)) {
+        if (TakeKeyboardRequest() != 0 && Main.hasFocus) ShowKeyboard();
+        manualKeyboard = manualKeyboard && Platform.Get<IImeService>().IsEnabled;
+        bool autoKeyboard = MobileJoystickConfig.Instance?.EnableMobileControls == true && AutoImeEnabled;
+        if (!autoKeyboard && !manualKeyboard) { owner = null; readByField = false; Stop(); return; }
+        if (Main.hasFocus && (manualKeyboard || owner != null || HasNativeTextField || readByField && inputFrame - lastReadFrame <= 3)) {
             if (!started || !TextInputEXT.IsTextInputActive()) TextInputEXT.StartTextInput();
             started = true;
             PlayerInput.WritingText = true;

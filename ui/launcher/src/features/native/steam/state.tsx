@@ -10,7 +10,7 @@ import {
 import type { useTranslation } from '../../../i18n';
 import { nativeRequest } from '../../../native/bridge';
 import { useLauncher } from '../../../state/launcher';
-import { useDownloads } from '../download-state';
+import { type DownloadTask, useDownloads } from '../download-state';
 
 export interface SteamAccount {
   phase: string;
@@ -22,7 +22,7 @@ export interface SteamAccount {
 }
 export interface SteamDownload {
   id: number;
-  status: 'running' | 'completed' | 'failed' | 'cancelled';
+  status: DownloadTask['status'];
   error?: string;
   cancelling: boolean;
 }
@@ -142,7 +142,9 @@ export function SteamProvider({ children }: { children: ReactNode }) {
       name: details?.name || 'Terraria',
       source: 'Steam · Linux 游戏资源',
     });
-  const cancelDownload = downloads.cancel;
+  const cancelDownload = () => {
+    if (download) downloads.cancel(download.id);
+  };
   return (
     <SteamContext.Provider
       value={{

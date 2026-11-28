@@ -51,8 +51,6 @@ internal static class MobileNativeSettings
 		if (modes.Count == 0) return;
 		int selected = modes.IndexOf(new Point(Main.PendingResolutionWidth, Main.PendingResolutionHeight));
 		Point next = modes[(selected + 1) % modes.Count];
-		// Pocket's render-scale adapter must honor an explicit in-game choice.
-		AppContext.SetData("MobileJoystick.RenderResolution", (next.X, next.Y));
 		Main.SetResolution(next.X, next.Y);
 		Main.PendingResolutionWidth = Main.screenWidth;
 		Main.PendingResolutionHeight = Main.screenHeight;

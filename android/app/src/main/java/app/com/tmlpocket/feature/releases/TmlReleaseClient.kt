@@ -5,18 +5,29 @@ import java.io.IOException
 import java.io.InterruptedIOException
 import java.net.HttpURLConnection
 import java.net.URL
-import java.security.MessageDigest
 import org.json.JSONArray
+import org.json.JSONObject
 
-/** GitHub release metadata and downloads. No Android dependencies; connections are injectable for tests. */
+/** Regional release metadata and downloads. No Android dependencies; connections are injectable for tests. */
 class TmlReleaseClient(
-    private val releasesUrl: String = "https://api.github.com/repos/tModLoader/tModLoader/releases",
+    val source: TmlReleaseSource = TmlReleaseSource.GITHUB,
     private val connect: (URL) -> HttpURLConnection = { it.openConnection() as HttpURLConnection }
 ) {
     fun releases(page: Int, cancelled: () -> Boolean = { false }): TmlReleasePage {
         require(page > 0)
+        return parsePage(readCatalog("${source.catalog}?per_page=$PAGE_SIZE&page=$page", cancelled))
+    }
+
+    fun release(id: Long, cancelled: () -> Boolean = { false }): TmlRelease {
+        require(id > 0)
+        val body = readCatalog("${source.catalog}/$id", cancelled)
+        return parsePage(JSONArray().put(JSONObject(body)).toString()).releases
+            .firstOrNull { it.id == id } ?: throw IOException("此发行版未提供 tModLoader ZIP")
+    }
+
+    private fun readCatalog(address: String, cancelled: () -> Boolean): String {
         checkCancelled(cancelled)
-        val connection = connection("$releasesUrl?per_page=$PAGE_SIZE&page=$page")
+        val connection = connection(address)
         try {
             checkResponse(connection)
             val body = connection.inputStream.use { input ->
@@ -32,72 +43,32 @@ class TmlReleaseClient(
                 output.toString("UTF-8")
             }
             checkCancelled(cancelled)
-            return parsePage(body)
+            return body
         } finally {
             connection.disconnect()
         }
     }
 
+    /**
+     * Pass a persistent directory to keep resumable bytes across process death.
+     * The returned verified ZIP belongs to the caller, which deletes it after import.
+     * Cancellation throws InterruptedIOException and retains the cached partial.
+     */
     fun download(
         release: TmlRelease,
         cacheDir: File,
         cancelled: () -> Boolean = { false },
         progress: (Long, Long) -> Unit = { _, _ -> }
-    ): File {
-        checkCancelled(cancelled)
-        if (!cacheDir.isDirectory && !cacheDir.mkdirs()) throw IOException("无法创建下载缓存")
-        val partial = File.createTempFile("tml-${release.id}-", ".part", cacheDir)
-        var completed = false
-        try {
-            val connection = connection(release.downloadUrl)
-            connection.setRequestProperty("Accept", "application/octet-stream")
-            try {
-                checkResponse(connection)
-                val length = connection.contentLengthLong
-                if (length >= 0 && release.size >= 0 && length != release.size) {
-                    throw IOException("下载长度与发行资产不符，请重试")
-                }
-                val expectedDigest = release.digest?.let {
-                    if (!it.matches(Regex("sha256:[0-9a-fA-F]{64}"))) throw IOException("不支持的发行资产摘要")
-                    it.substringAfter(':')
-                }
-                val hash = MessageDigest.getInstance("SHA-256")
-                var received = 0L
-                val total = if (release.size >= 0) release.size else length
-                connection.inputStream.use { input ->
-                    partial.outputStream().use { output ->
-                        val buffer = ByteArray(64 * 1024)
-                        while (true) {
-                            checkCancelled(cancelled)
-                            val count = input.read(buffer)
-                            if (count < 0) break
-                            received += count
-                            if ((release.size >= 0 && received > release.size) || (length >= 0 && received > length)) {
-                                throw IOException("下载数据超过发行资产长度")
-                            }
-                            output.write(buffer, 0, count)
-                            hash.update(buffer, 0, count)
-                            progress(received, total)
-                        }
-                    }
-                }
-                checkCancelled(cancelled)
-                if ((length >= 0 && received != length) || (release.size >= 0 && received != release.size)) {
-                    throw IOException("下载不完整，请重试")
-                }
-                val actualDigest = hash.digest().joinToString("") { "%02x".format(it.toInt() and 255) }
-                if (expectedDigest != null && !actualDigest.equals(expectedDigest, ignoreCase = true)) {
-                    throw IOException("SHA-256 校验失败，请重试")
-                }
-                completed = true
-                return partial
-            } finally {
-                connection.disconnect()
-            }
-        } finally {
-            if (!completed) partial.delete()
-        }
-    }
+    ): File = ResumableReleaseDownload(release, source.key(release.id), cacheDir, ::connection, cancelled, progress).download()
+
+    enum class DownloadError { HTTP, NETWORK, STORAGE, VALIDATION, DIGEST }
+
+    class DownloadException(
+        val reason: DownloadError,
+        message: String,
+        val httpStatus: Int? = null,
+        cause: Throwable? = null
+    ) : IOException(message, cause)
 
     private fun connection(address: String): HttpURLConnection {
         val url = URL(address)
@@ -106,9 +77,8 @@ class TmlReleaseClient(
             connectTimeout = 15_000
             readTimeout = 15_000
             instanceFollowRedirects = true
-            setRequestProperty("Accept", "application/vnd.github+json")
+            setRequestProperty("Accept", "application/json")
             setRequestProperty("User-Agent", "tModLoader-Mobile-Launcher")
-            setRequestProperty("X-GitHub-Api-Version", "2022-11-28")
             setRequestProperty("Accept-Encoding", "identity")
         }
     }
@@ -116,8 +86,8 @@ class TmlReleaseClient(
     private fun checkResponse(connection: HttpURLConnection) {
         val code = connection.responseCode
         if (connection.url.protocol != "https") throw IOException("拒绝非 HTTPS 重定向")
-        if (code == 403 || code == 429) throw IOException("GitHub 请求受限，请稍后重试；仍可导入本地 ZIP")
-        if (code !in 200..299) throw IOException("GitHub 请求失败（HTTP $code），请重试")
+        if (code == 403 || code == 429) throw IOException("${source.label} 请求受限，请稍后重试；仍可导入本地 ZIP")
+        if (code !in 200..299) throw IOException("${source.label} 请求失败（HTTP $code），请重试")
     }
 
     companion object {
@@ -138,8 +108,10 @@ class TmlReleaseClient(
                     if (tag.isBlank() || !url.startsWith("https://")) continue
                     releases += TmlRelease(
                         item.optLong("id"), tag, item.optString("name").ifBlank { tag },
-                        item.optBoolean("prerelease", false), url, asset.optLong("size", -1),
-                        if (asset.isNull("digest")) null else asset.optString("digest").takeIf { it.isNotBlank() }
+                        item.optBoolean("prerelease", false), url,
+                        if (tag == TmlReleaseSource.DEFAULT_TAG) TmlReleaseSource.DEFAULT_SIZE else asset.optLong("size", -1),
+                        if (tag == TmlReleaseSource.DEFAULT_TAG) TmlReleaseSource.DEFAULT_DIGEST
+                        else if (asset.isNull("digest")) null else asset.optString("digest").takeIf { it.isNotBlank() }
                     )
                     break
                 }

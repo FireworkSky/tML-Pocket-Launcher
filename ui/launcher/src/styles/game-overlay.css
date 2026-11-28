@@ -1,0 +1,64 @@
+@import './styles.css';
+@import './launch-transition.css';
+@import './tml-theme.css';
+
+html:has(body.game-overlay),
+body.game-overlay,
+[data-skin] body.game-overlay:not(.has-background) {
+  background: transparent;
+}
+.game-dialog-shade,
+.game-dialog-position,
+.game-notice-position {
+  position: fixed;
+  inset: 0;
+  z-index: 1010;
+}
+.game-dialog-shade {
+  background: #080b1180;
+}
+.game-dialog-position,
+.game-notice-position {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(12px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
+    max(12px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  pointer-events: none;
+}
+.game-dialog-position .dialog {
+  max-height: 100%;
+  pointer-events: auto;
+  overflow-wrap: anywhere;
+}
+.game-dialog-position .dialog-actions {
+  flex-wrap: wrap;
+}
+.game-dialog-position .game-message {
+  white-space: pre-wrap;
+}
+.game-dialog-position button:focus-visible {
+  outline-color: var(--game-selected, var(--accent));
+}
+.game-prompt-input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: min(var(--radius), 10px);
+  background: var(--subtle);
+  color: var(--text);
+}
+.game-notice-position {
+  z-index: 1020;
+  padding-bottom: max(28px, env(safe-area-inset-bottom));
+}
+.game-notice-position .toast {
+  position: static;
+  transform: none;
+  color: var(--strong);
+  background: var(--elevated);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow-wrap: anywhere;
+}

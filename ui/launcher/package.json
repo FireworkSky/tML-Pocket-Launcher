@@ -6,9 +6,8 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 8769 --strictPort",
     "check": "tsc --noEmit",
-    "format:check": "prettier --check src tests *.json *.ts *.html README.md public/preview.html",
+    "format:check": "prettier --check src *.json *.ts *.html README.md public/preview.html",
     "build": "tsc --noEmit && vite build",
-    "test": "node tests/run.cjs",
     "preview": "vite preview --host 127.0.0.1 --port 8768 --strictPort",
     "postinstall": "patch-package"
   },

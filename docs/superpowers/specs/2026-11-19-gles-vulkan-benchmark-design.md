@@ -9,7 +9,7 @@ Provide a repeatable way to compare the launcher's OpenGL ES and SDL_GPU/Vulkan 
 - The launcher builds SDL3 with SDL_GPU and Vulkan enabled.
 - FNA3D includes both its OpenGL and SDL_GPU drivers. In SDL3 builds, `FNA3D_FORCE_DRIVER=Vulkan` aliases to the SDL_GPU driver and requests its Vulkan backend.
 - The existing FNA3D OpenGL driver includes opt-in runtime diagnostics. The SDL_GPU driver currently lacks matching benchmark-facing reporting.
-- The project packages its built-in tModLoader mod from `managed/mods` using `scripts/build/prepare-builtin-mods.ps1`.
+- Mobile controls are compiled into the APK-owned `MobileLauncher.Controls` assembly. The launcher does not package a built-in tModLoader mod.
 - Launcher render scale is configurable and affects the backbuffer, so benchmark runs must record it and keep it constant when comparing backends.
 
 ## Proposed Design

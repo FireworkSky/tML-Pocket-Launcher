@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Microsoft.Xna.Framework;
@@ -14,8 +13,7 @@ public sealed class MobileLauncherControl
 	private static long nextRenderId;
 	internal readonly long RenderId = System.Threading.Interlocked.Increment(ref nextRenderId);
 	public JObject Data { get; set; } = new();
-	public Dictionary<string, string> Assets { get; set; } = new(StringComparer.Ordinal);
-	public MobileLauncherControl Clone() => new() { Data = (JObject)Data.DeepClone(), Assets = new(Assets, StringComparer.Ordinal) };
+	public MobileLauncherControl Clone() => new() { Data = (JObject)Data.DeepClone() };
 	internal string Type => String("type", "button");
 	internal float Number(string key, float fallback = 0) => Data.Value<float?>(key) ?? fallback;
 	internal string String(string key, string fallback = "") => Data.Value<string>(key) ?? fallback;
@@ -45,9 +43,7 @@ public sealed class MobileLauncherControl
 	}
 	internal static MobileCustomControlKind Kind(string type) => type switch {
 		"button" => MobileCustomControlKind.Button, "joystick" => MobileCustomControlKind.Joystick,
-		"radialmenu" => MobileCustomControlKind.RadialMenu, "dpad" => MobileCustomControlKind.DPad,
-		"touchpad" => MobileCustomControlKind.Touchpad, "mousewheel" => MobileCustomControlKind.Mousewheel,
-		"text" => MobileCustomControlKind.Text, _ => throw new InvalidDataException("Unknown control type: " + type)
+		"radialmenu" => MobileCustomControlKind.RadialMenu, _ => throw new InvalidDataException("Unknown control type: " + type)
 	};
 	internal static JObject Defaults(string type)
 	{
@@ -59,32 +55,14 @@ public sealed class MobileLauncherControl
 		};
 		switch (type) {
 			case "button": data["mode"] = "KEYBOARD"; data["keycode"] = "UNKNOWN"; data["isToggle"] = false;
-				data["shape"] = "RECTANGLE"; data["polygonPoints"] = new JArray(); data["useTextureAlphaHitTest"] = false; break;
+				data["shape"] = "RECTANGLE"; data["polygonPoints"] = new JArray(); break;
 			case "joystick": data["mode"] = "KEYBOARD"; data["joystickKeys"] = new JArray("KEYBOARD_W", "KEYBOARD_D", "KEYBOARD_S", "KEYBOARD_A");
 				data["stickKnobSize"] = .4; data["stickOpacity"] = .7; break;
-			case "dpad": data["mode"] = "KEYBOARD"; data["style"] = "CROSS"; data["upKeycode"] = "KEYBOARD_W";
-				data["rightKeycode"] = "KEYBOARD_D"; data["downKeycode"] = "KEYBOARD_S"; data["leftKeycode"] = "KEYBOARD_A";
-				data["buttonSpacing"] = .05; data["buttonSize"] = .35; data["deadZone"] = .2;
-				data["allowDiagonal"] = true; data["activeColor"] = unchecked((int)0xCCFFFFFF); data["showLabels"] = false; break;
 			case "radialmenu": data["sectorCount"] = 8; data["expandedScale"] = 2.5; data["deadZoneRatio"] = .3;
 				data["expandDuration"] = 150; data["showDividers"] = true; data["dividerColor"] = 0x66FFFFFF;
 				data["selectedColor"] = unchecked((int)0x99FFFFFF);
-				data["sectors"] = new JArray(Enumerable.Range(1, 8).Select(i => new JObject { ["keycode"] = "KEYBOARD_" + i, ["label"] = i.ToString(), ["iconPath"] = "" })); break;
-			case "text": data["displayText"] = "Text"; data["shape"] = "RECTANGLE"; break;
-			case "touchpad": data["isDoubleClickSimulateJoystick"] = true; break;
-			case "mousewheel": data["orientation"] = "VERTICAL"; data["reverseDirection"] = false; data["scrollSensitivity"] = 40; data["scrollRatio"] = 1; break;
+				data["sectors"] = new JArray(Enumerable.Range(1, 8).Select(i => new JObject { ["keycode"] = "KEYBOARD_" + i, ["label"] = i.ToString() })); break;
 		}
-		string[] layers = type switch {
-			"button" => new[] { "normal", "pressed", "toggled", "disabled" },
-			"joystick" => new[] { "background", "knob", "backgroundPressed", "knobPressed" },
-			"radialmenu" => new[] { "centerBackground", "expandedBackground", "sector", "sectorSelected" },
-			"touchpad" => new[] { "background", "touchIndicator" }, "mousewheel" => new[] { "background", "wheelIndicator" },
-			"text" => new[] { "background" }, _ => Array.Empty<string>()
-		};
-		data["texture"] = new JObject(layers.Select(layer => new JProperty(layer, new JObject {
-			["path"] = "", ["enabled"] = false, ["scaleMode"] = "FIT", ["opacity"] = 1, ["tintColor"] = 0,
-			["padding"] = 0, ["rotation"] = 0, ["flipHorizontal"] = false, ["flipVertical"] = false, ["clipToShape"] = true
-		})));
 		return data;
 	}
 	internal static void FillDefaults(JObject data)
@@ -93,8 +71,8 @@ public sealed class MobileLauncherControl
 		Merge(data, defaults);
 		if (data.Value<string>("type") == "radialmenu" && data["sectors"] is JArray sectors) {
 			int count = data.Value<int?>("sectorCount") ?? 8;
-			while (sectors.Count < Math.Min(12, count)) sectors.Add(new JObject { ["keycode"] = "UNKNOWN", ["label"] = "", ["iconPath"] = "" });
-			foreach (JObject sector in sectors.OfType<JObject>()) Merge(sector, new JObject { ["keycode"] = "UNKNOWN", ["label"] = "", ["iconPath"] = "" });
+			while (sectors.Count < Math.Min(12, count)) sectors.Add(new JObject { ["keycode"] = "UNKNOWN", ["label"] = "" });
+			foreach (JObject sector in sectors.OfType<JObject>()) Merge(sector, new JObject { ["keycode"] = "UNKNOWN", ["label"] = "" });
 		}
 	}
 	private static void Merge(JObject target, JObject defaults)
@@ -112,6 +90,23 @@ public sealed class MobileLauncherControl
 		if (data == null) throw new InvalidDataException("Missing control data");
 		Kind(data.Value<string>("type"));
 		data.Remove("isRightStick");
+		data.Remove("texture");
+		data.Remove("useTextureAlphaHitTest");
+		void ClearPointerBinding(JObject source)
+		{
+			if (LauncherControlBindings.RemovedPointerBinding(source.Value<string>("keycode")))
+				source["keycode"] = "UNKNOWN";
+		}
+		ClearPointerBinding(data);
+		if (data["sectors"] is JArray oldSectors)
+			foreach (JObject sector in oldSectors.OfType<JObject>()) {
+				sector.Remove("iconPath");
+				ClearPointerBinding(sector);
+			}
+		if (data["joystickKeys"] is JArray oldKeys)
+			for (int index = 0; index < oldKeys.Count; index++)
+				if (oldKeys[index].Type == JTokenType.String && LauncherControlBindings.RemovedPointerBinding(oldKeys[index].Value<string>()))
+					oldKeys[index] = "UNKNOWN";
 		if (LauncherControlBindings.ControlKeys(data).Any(LauncherControlBindings.RemovedBinding))
 			throw new InvalidDataException("Unsupported control binding");
 		FillDefaults(data);
@@ -143,28 +138,18 @@ public sealed class MobileLauncherControl
 		void OneOf(string field, params string[] options) { if (data[field] != null && !options.Contains(data.Value<string>(field))) throw new InvalidDataException("Invalid " + field); }
 		if (!SupportsMode(data)) throw new InvalidDataException("Unsupported control mode: " + data.Value<string>("mode"));
 		OneOf("shape", "RECTANGLE", "CIRCLE", "POLYGON");
-		OneOf("orientation", "VERTICAL", "HORIZONTAL"); OneOf("style", "CROSS", "ROUND", "SQUARE");
 		foreach (string key in new[] { "isVisible", "isPassThrough", "isSizeRatioLocked" }) if (data[key].Type != JTokenType.Boolean) throw new InvalidDataException("Invalid " + key);
 		if (data.Value<string>("type") == "radialmenu") {
 			Range("sectorCount", 4, 12); Range("expandedScale", 1, 8); Range("deadZoneRatio", 0, 1); Range("expandDuration", 0, 3000);
 			if (data["sectorCount"].Type != JTokenType.Integer) throw new InvalidDataException("Sector count must be an integer");
 			if (data["sectors"] is not JArray sectors || sectors.Count > 12 || sectors.Any(s => s is not JObject)) throw new InvalidDataException("Invalid sectors");
-			foreach (JObject sector in sectors) Types(sector, new JObject { ["keycode"] = "", ["label"] = "", ["iconPath"] = "" });
+			foreach (JObject sector in sectors) Types(sector, new JObject { ["keycode"] = "", ["label"] = "" });
 		}
 		if (data.Value<string>("type") == "joystick") {
 			Range("stickKnobSize", .05, 1); Range("stickOpacity", 0, 1);
 			if (data["joystickKeys"] is not JArray keys || keys.Any(k => k.Type != JTokenType.String)
 				|| data.Value<string>("mode") == "KEYBOARD" && keys.Count != 4) throw new InvalidDataException("Expected four joystick keys");
 		}
-		if (data.Value<string>("type") == "dpad") { Range("deadZone", 0, .95); Range("buttonSpacing", 0, .5); Range("buttonSize", .05, .5); }
-		if (data.Value<string>("type") == "mousewheel") { Range("scrollSensitivity", 1, 1000); Range("scrollRatio", .1, 5); }
 		if (data["polygonPoints"] is JArray points && (points.Count > 64 || points.Any(p => p is not JObject || p.Value<double?>("x") is not >= 0 or > 1 || p.Value<double?>("y") is not >= 0 or > 1))) throw new InvalidDataException("Invalid polygon");
-		if (data["texture"] is not JObject textures) throw new InvalidDataException("Invalid textures");
-		foreach (JObject layer in textures.Properties().Select(p => p.Value).OfType<JObject>()) {
-			if (layer.Value<double?>("opacity") is not >= 0 or > 1 || layer.Value<double?>("padding") is not >= 0 or > .49) throw new InvalidDataException("Invalid texture opacity/padding");
-			if (!new[] { "FIT", "FILL", "STRETCH", "CENTER", "TILE" }.Contains(layer.Value<string>("scaleMode"))) throw new InvalidDataException("Invalid texture scaleMode");
-			if (layer.Value<double?>("rotation") is not >= -3600 or > 3600) throw new InvalidDataException("Invalid texture rotation");
-			if (layer["tintColor"].Type != JTokenType.Integer || layer.Value<long>("tintColor") < int.MinValue || layer.Value<long>("tintColor") > uint.MaxValue) throw new InvalidDataException("Invalid texture tint");
-		}
 	}
 }

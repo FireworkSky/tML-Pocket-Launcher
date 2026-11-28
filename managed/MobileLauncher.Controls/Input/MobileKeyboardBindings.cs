@@ -1,11 +1,15 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
+using MonoMod.RuntimeDetour;
 using Terraria;
 using Terraria.GameContent;
+using Terraria.GameInput;
+using Terraria.UI;
 
 namespace MobileJoystick;
 
@@ -18,6 +22,45 @@ internal static class MobileKeyboardBindings
 	internal static readonly string[] Names = byName.Values.OrderBy(KeyGroup).ThenBy(key => key).Select(key => key.ToString()).ToArray();
 	private static KeyboardState physical, previousPhysical;
 	private static bool merged, previouslyMerged;
+	private static bool backAsEscape;
+
+	[DllImport("main", EntryPoint = "tml_pocket_bridge_take_back")]
+	private static extern int TakeAndroidBack();
+
+	internal static IDisposable InstallBackInput()
+		=> new Hook(typeof(Keyboard).GetMethod(nameof(Keyboard.GetState), Type.EmptyTypes),
+			(Func<Func<KeyboardState>, KeyboardState>)ReadKeyboard);
+
+	private static KeyboardState ReadKeyboard(Func<KeyboardState> original)
+	{
+		KeyboardState keyboard = original();
+		return backAsEscape && keyboard.IsKeyUp(Keys.Escape)
+			? Merge(keyboard, new[] { Keys.Escape }) : keyboard;
+	}
+
+	private static bool RouteBack()
+	{
+		if (Main.gameMenu) {
+			if (MobileTitleSettingsSystem.HandleBack()) return true;
+			// Escape can leave the title screen. Android Back stays in the game.
+			return Main.menuMode == 0;
+		}
+		if (PlayerInput.WritingText || MobileChatSystem.IsOpen) return false;
+		if (Main.ingameOptionsWindow) {
+			IngameOptions.Close();
+		}
+		else if (Main.inFancyUI) {
+			IngameFancyUI.Close();
+		}
+		else if (Main.mapFullscreen) {
+			Main.mapFullscreen = false;
+		}
+		else if (Main.playerInventory || Main.LocalPlayer.chest != -1 || Main.LocalPlayer.talkNPC != -1) {
+			return false;
+		}
+		else IngameOptions.Open();
+		return true;
+	}
 
 	private static int KeyGroup(Keys key) => key switch {
 		>= Keys.A and <= Keys.Z => 0,
@@ -37,6 +80,7 @@ internal static class MobileKeyboardBindings
 	internal static void HandleInput(On_Main.orig_DoUpdate_HandleInput orig, Main self)
 	{
 		if ((merged || previouslyMerged) && !MobileJoystickInput.ShouldUseControls(MobileJoystickConfig.Instance)) Reset();
+		backAsEscape = TakeAndroidBack() != 0 && Main.hasFocus && !RouteBack();
 		orig(self);
 		previousPhysical = merged ? physical : Main.oldKeyState;
 		previouslyMerged = merged;
@@ -50,6 +94,7 @@ internal static class MobileKeyboardBindings
 		if (merged) Main.keyState = physical;
 		if (previouslyMerged) Main.oldKeyState = previousPhysical;
 		merged = previouslyMerged = false;
+		backAsEscape = false;
 		held.Clear();
 	}
 

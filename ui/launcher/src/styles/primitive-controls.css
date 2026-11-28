@@ -94,6 +94,11 @@
 .select-item[data-state='checked'] {
   color: var(--accent-ink);
 }
+.select-item[data-disabled],
+.select-trigger:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
 .select-check {
   display: flex;
   width: 18px;

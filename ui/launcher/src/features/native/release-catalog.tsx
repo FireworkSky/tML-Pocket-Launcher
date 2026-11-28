@@ -13,12 +13,27 @@ import {
   ResourceReset,
 } from './resource-layout';
 
+const RELEASE_SOURCE_KEY = 'tml-release-source';
+type SourceChoice = 'auto' | 'gitee' | 'github';
+
+function savedReleaseSource(): SourceChoice {
+  try {
+    const saved = localStorage.getItem(RELEASE_SOURCE_KEY);
+    if (saved === 'gitee' || saved === 'github') return saved;
+  } catch {
+    // The selector still works if storage is unavailable.
+  }
+  return 'auto';
+}
+
 export function NativeReleaseCatalog() {
   const { t, locale } = useTranslation();
   const launcher = useLauncher();
   const { nativeState, closeDialog, openDialog } = launcher;
-  const { instances, importInfo } = useNativeActions(launcher);
+  const { installedVersions, importInfo } = useNativeActions(launcher);
   const downloads = useDownloads();
+  const [sourceChoice, setSourceChoice] = useState(savedReleaseSource);
+  const regionalSource = nativeState?.releaseSource;
   const [items, setItems] = useState<NativeRelease[]>([]);
   const [page, setPage] = useState(1);
   const [more, setMore] = useState(true);
@@ -31,7 +46,7 @@ export function NativeReleaseCatalog() {
   const pending = useRef(false);
   const generation = useRef(0);
   const retryRequest = useRef({ page: 1, replace: false });
-  const load = async (next: number, replace = false) => {
+  const load = async (next: number, replace = false, source = sourceChoice) => {
     if (pending.current) return;
     pending.current = true;
     retryRequest.current = { page: next, replace };
@@ -39,7 +54,7 @@ export function NativeReleaseCatalog() {
     setLoading(true);
     setFailure(undefined);
     try {
-      const result = await nativeRequest<ReleasePage>('releases', { page: next });
+      const result = await nativeRequest<ReleasePage>('releases', { page: next, source });
       if (token !== generation.current) return;
       setItems((old) => {
         const previous = replace ? [] : old;
@@ -64,8 +79,23 @@ export function NativeReleaseCatalog() {
     void load(1);
     return () => {
       generation.current++;
+      pending.current = false;
     };
   }, []);
+  const changeSource = (value: string) => {
+    if (value !== 'auto' && value !== 'gitee' && value !== 'github') return;
+    if (sourceChoice === value || pending.current || nativeState?.busy) return;
+    setSourceChoice(value);
+    setItems([]);
+    setMore(false);
+    setPage(1);
+    try {
+      localStorage.setItem(RELEASE_SOURCE_KEY, value);
+    } catch {
+      // This selection still applies while the catalog is open.
+    }
+    void load(1, true, value);
+  };
   const reset = () => {
     setChannel('all');
     setQuery('');
@@ -88,8 +118,8 @@ export function NativeReleaseCatalog() {
     openDialog({
       title: t('安装 {version}', { version: release.tag }),
       description: t(
-        '{size} MB · 官方发行包。独立安装并设为当前版本；同版本重新安装只替换该版本文件。保留模组与存档。',
-        { size: (release.size / 1048576).toFixed(1) },
+        '{size}官方发行包。独立安装并设为当前版本；同版本重新安装只替换该版本文件。保留模组与存档。',
+        { size: release.size > 0 ? `${(release.size / 1048576).toFixed(1)} MB · ` : '' },
       ),
       actions: (
         <>
@@ -101,7 +131,7 @@ export function NativeReleaseCatalog() {
                 method: 'download',
                 params: { id: release.id },
                 name: `tModLoader ${release.tag}`,
-                source: t('GitHub · 官方发行包'),
+                source: release.id.startsWith('gitee-') ? 'Gitee' : 'GitHub',
               })
             }
           >
@@ -167,13 +197,24 @@ export function NativeReleaseCatalog() {
               ['name', t('版本号')],
             ]}
           />
-          <div className="resource-source">
-            <span>{t('版本来源')}</span>
-            <Badge>GitHub · tModLoader</Badge>
-            <p>{t('筛选作用于已加载版本。不同版本独立安装，模组与存档共用。')}</p>
-          </div>
+          <ResourceSelect
+            label={t('版本来源')}
+            value={sourceChoice}
+            onChange={changeSource}
+            disabled={loading || nativeState?.busy}
+            options={[
+              [
+                'auto',
+                regionalSource
+                  ? t('按地区自动（{source}）', { source: regionalSource })
+                  : t('按地区自动'),
+              ],
+              ['gitee', 'Gitee'],
+              ['github', 'GitHub'],
+            ]}
+          />
           <Button onClick={() => importInfo('tml')}>{t('导入 ZIP')}</Button>
-          <Button onClick={instances}>{t('管理已安装版本')}</Button>
+          <Button onClick={installedVersions}>{t('管理已安装版本')}</Button>
           <ResourceReset onClick={reset} />
         </>
       }
@@ -204,13 +245,15 @@ export function NativeReleaseCatalog() {
               )}
             </div>
             <p>
-              {t('{size} MB · tModLoader 官方发行包', {
-                size: (release.size / 1048576).toFixed(1),
+              {t('{size}tModLoader 官方发行包', {
+                size: release.size > 0 ? `${(release.size / 1048576).toFixed(1)} MB · ` : '',
               })}
             </p>
           </div>
           <div className="resource-card-end">
-            <span className="resource-provider">GitHub</span>
+            <span className="resource-provider">
+              {release.id.startsWith('gitee-') ? 'Gitee' : 'GitHub'}
+            </span>
             <Button disabled={nativeState?.busy} onClick={() => install(release)}>
               <Icon name="download" />
               {t(locale === 'en' ? '下载此版本' : '下载')}

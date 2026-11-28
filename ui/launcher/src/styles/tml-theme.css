@@ -75,7 +75,7 @@
 }
 
 [data-skin='tml'] .tml-wordmark {
-  width: clamp(82px, 28vw, 160px);
+  width: clamp(82px, 28vw, 181px);
   min-width: 0;
   height: 28px;
   margin-inline-end: auto;

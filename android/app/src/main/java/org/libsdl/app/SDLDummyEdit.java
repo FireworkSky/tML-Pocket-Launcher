@@ -47,6 +47,9 @@ public class SDLDummyEdit extends View implements View.OnKeyListener
         if (event.getAction()==KeyEvent.ACTION_UP && keyCode == KeyEvent.KEYCODE_BACK) {
             if (SDLActivity.mTextEdit != null && SDLActivity.mTextEdit.getVisibility() == View.VISIBLE) {
                 SDLActivity.onNativeKeyboardFocusLost();
+                if (getContext() instanceof SDLActivity) {
+                    ((SDLActivity) getContext()).onSoftKeyboardBack();
+                }
             }
         }
         return super.onKeyPreIme(keyCode, event);

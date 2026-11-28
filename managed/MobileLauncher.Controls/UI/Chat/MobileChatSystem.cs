@@ -96,8 +96,6 @@ public sealed class MobileChatSystem : MobileSystem
 		waitForRelease = true; pointerId = -1;
 		wheel = Mouse.GetState().ScrollWheelValue;
 		layout = new(PlayerInput.RealScreenWidth, PlayerInput.RealScreenHeight);
-		Main.OpenPlayerChat();
-		MobileTextInputSystem.Focus(this, layout.Input);
 		SoundEngine.PlaySound(SoundID.MenuOpen);
 	}
 	private void Close()
@@ -198,6 +196,10 @@ public sealed class MobileChatSystem : MobileSystem
 	private bool ReadChatPointer(ref Vector2 point, out bool cancelled)
 	{
 		cancelled = false;
+		if (MobileTrackpad.Enabled) {
+			pointerId = -1;
+			return MobileTrackpad.ReadPointer(ref point);
+		}
 		foreach (MobileTouchContact contact in MobileJoystickInput.ActiveContacts) {
 			if (pointerId == -1 && (contact.State != TouchLocationState.Pressed || !BlocksControl(contact.Position))) continue;
 			if (pointerId != -1 && contact.Id != pointerId) continue;

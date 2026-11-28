@@ -10,7 +10,7 @@ $requiredSubmodules = @(
     }
     [pscustomobject]@{
         Path = 'external/FNA3D'
-        Revision = '2c2907aad90f66dba083ca3689343c1afcf7fb09'
+        Revision = 'd8f5025adc24e0afdd2c747e2c93b7b03f34616d'
     }
     [pscustomobject]@{
         Path = 'external/FAudio'

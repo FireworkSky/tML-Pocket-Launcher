@@ -54,9 +54,9 @@ const english: Record<string, string> = {
     'Choose an official release ZIP containing assemblies, dependencies, and Content.',
   '校验发行布局 → 检查运行版本 → 保留用户数据后安装':
     'Verify release layout → Check runtime version → Install and keep user data',
-  导入模组: 'Import mods',
-  '选择一个或多个 .tmod 文件；展示名称、版本与依赖后确认。':
-    'Choose one or more .tmod files and review their names, versions, and dependencies before confirming.',
+  导入游戏模组: 'Import mods',
+  '选择一个或多个游戏模组，核对名称、版本和依赖后确认导入。':
+    'Choose one or more mods and review their names, versions, and dependencies before confirming.',
   '读取元信息 → 校验重复与依赖 → 加入当前配置':
     'Read metadata → Check for duplicates and dependencies → Add to current profile',
   导入补丁包: 'Import a patch package',
@@ -327,8 +327,8 @@ const english: Record<string, string> = {
   未启用: 'Disabled',
   检查更新: 'Check for updates',
   添加你的第一个模组: 'Add your first mod',
-  '可以直接浏览和下载模组，也可以导入本地 .tmod 文件。':
-    'Browse and download mods or import local .tmod files.',
+  '可以浏览和下载游戏模组，也可以从本地导入。':
+    'Browse and download mods or import them from your device.',
   没有匹配的模组: 'No matching mods',
   '尝试其他关键词或筛选条件。': 'Try different search terms or filters.',
   清除筛选: 'Clear filters',
@@ -393,7 +393,7 @@ const english: Record<string, string> = {
   导入清单: 'Import list',
   '{count} 项 · {profile} · {missing} 项未安装': 'Mods: {count} · {profile} · Missing: {missing}',
   保存一套模组组合: 'Save a mod pack',
-  '保存启用清单，方便切换、分享或补齐缺失模组。这里的清单不包含 .tmod 文件。':
+  '保存启用清单，方便切换、分享或补齐缺失模组。清单只记录模组名称和配置信息。':
     'Save a list to switch between mod packs, share them, or download missing mods. Lists contain mod names and profile information only.',
   '清单包管理 · 不加载模组，也不编译源码': 'Mod pack management · List files only',
   '清单文件请小于 1 MB。': 'Choose a list file smaller than 1 MB.',

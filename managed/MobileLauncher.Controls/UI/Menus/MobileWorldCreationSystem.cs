@@ -51,7 +51,8 @@ public sealed class MobileWorldCreationSystem : MobileSystem
 		if (esc && !escape) { if (editing >= 0) FinishInput(false); else if (popup >= 0) popup = -1; else Click("Click_GoBack"); ResetPress(); }
 		escape = esc;
 		bool previous = down; var mouse = Mouse.GetState(); if (touch < 0) pointer = new(mouse.X, mouse.Y); down = mouse.LeftButton == ButtonState.Pressed;
-		TouchCollection touches = MobileTouchInput.GetState();
+		TouchCollection touches = MobileTouchInput.GetMenuContacts();
+		if (MobileTrackpad.Enabled) { touch = -1; down = MobileTrackpad.ReadPointer(ref pointer); }
 		if (touch < 0) foreach (TouchLocation t in touches) if (t.State == TouchLocationState.Pressed) { touch = t.Id; break; }
 		if (touch >= 0) { bool found = false; down = false; foreach (TouchLocation t in touches) if (t.Id == touch) { found = true; int w = TouchPanel.DisplayWidth > 0 ? TouchPanel.DisplayWidth : PlayerInput.RealScreenWidth; int h = TouchPanel.DisplayHeight > 0 ? TouchPanel.DisplayHeight : PlayerInput.RealScreenHeight; pointer = new(t.Position.X * PlayerInput.RealScreenWidth / w, t.Position.Y * PlayerInput.RealScreenHeight / h); down = t.State is TouchLocationState.Pressed or TouchLocationState.Moved; break; } if (!found) { ResetPress(); return; } if (!down) touch = -1; }
 		if (wait) { if (!down) wait = false; return; }

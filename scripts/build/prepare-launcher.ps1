@@ -27,6 +27,8 @@ if ($LASTEXITCODE -ne 0) { throw "Store service publish failed with exit code $L
 
 New-Item -ItemType Directory -Path $assetRoot -Force | Out-Null
 Copy-Item -Path (Join-Path $publishRoot '*') -Destination $assetRoot -Recurse -Force
+python (Join-Path $PSScriptRoot 'draw-control-art.py') (Join-Path $assetRoot 'touch-drawings.json')
+if ($LASTEXITCODE -ne 0) { throw 'Touch drawing compilation failed' }
 & (Join-Path $PSScriptRoot 'prepare-game-references.ps1')
 dotnet build (Join-Path $repoRoot 'managed/MobileLauncher.Controls/MobileLauncher.Controls.csproj') -c Release --nologo
 if ($LASTEXITCODE -ne 0) { throw 'Built-in controls patch build failed' }

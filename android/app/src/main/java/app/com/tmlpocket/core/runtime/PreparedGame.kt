@@ -8,5 +8,6 @@ data class PreparedGame(
     val tmlAssembly: String,
     val contentDirectory: String,
     val terrariaDirectory: String,
+    val controlArtDirectory: String,
     val userDataDirectory: String
 )

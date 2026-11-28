@@ -164,6 +164,8 @@ internal class FileBrowserRepository(private val roots: List<BrowserRoot>) {
             when (kind) {
                 "terraria",
                 "terraria-steam",
+                "backup-import",
+                "backup-export",
                 "tml" -> setOf("zip")
                 "terraria-gog" -> setOf("sh")
                 "mod" -> setOf("tmod")

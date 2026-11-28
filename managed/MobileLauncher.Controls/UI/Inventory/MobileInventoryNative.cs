@@ -40,14 +40,12 @@ internal static class MobileInventoryNative
 		CraftLock?.SetValue(null, false);
 		CurrentCraft?.SetValue(null, -1);
 	}
-	internal static void DrawModSlot(int slot, int kind, Rectangle bounds, bool enabled, bool skipInput = false)
+	internal static (Item[] Accessories, Item[] Dyes) GetModSlotItems(ModAccessorySlotPlayer player)
+		=> ((Item[])Accessories.GetValue(player), (Item[])Dyes.GetValue(player));
+
+	internal static void DrawModSlot(AccessorySlotLoader loader, Item[] items, int context, int index, Point position, bool enabled, bool skipInput)
 	{
-		if (!CanDrawModSlots) return;
-		var player = Main.LocalPlayer.GetModPlayer<ModAccessorySlotPlayer>();
-		var loader = LoaderManager.Get<AccessorySlotLoader>();
-		Item[] items = (Item[])(kind == 2 ? Dyes : Accessories).GetValue(player);
-		int index = kind == 1 ? slot + player.SlotCount : slot;
 		DrawCounter.SetValue(loader, 0);
-		DrawSlot(loader, items, -10 - kind, index, !enabled, bounds.X, bounds.Y, skipInput);
+		DrawSlot(loader, items, context, index, !enabled, position.X, position.Y, skipInput);
 	}
 }

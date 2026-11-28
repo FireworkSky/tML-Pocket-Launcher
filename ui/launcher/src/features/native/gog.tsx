@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Badge, Button } from '../../components/ui';
+import { LabeledSelect } from '../../components/form-controls';
 import { useTranslation } from '../../i18n';
 import { useLauncher } from '../../state/launcher';
 import { nativeRequest } from '../../native/bridge';
@@ -119,21 +120,16 @@ export function NativeGogPanel() {
               {t('读取可下载版本')}
             </Button>
             {installers.length > 0 && (
-              <label className="native-field">
-                <span>{t('Terraria Linux 资源版本')}</span>
-                <select
-                  aria-label={t('Terraria Linux 资源版本')}
-                  value={selection}
-                  onChange={(event) => setSelection(event.target.value)}
-                >
-                  {installers.map((item) => (
-                    <option value={item.id} key={item.id}>
-                      {item.version || item.name} · {item.language} ·{' '}
-                      {Math.ceil(item.size / 1048576)} MB
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <LabeledSelect
+                className="native-field"
+                label={t('Terraria Linux 资源版本')}
+                value={selection}
+                onChange={setSelection}
+                options={installers.map((item) => [
+                  item.id,
+                  `${item.version || item.name} · ${item.language} · ${Math.ceil(item.size / 1048576)} MB`,
+                ])}
+              />
             )}
           </div>
           <Button

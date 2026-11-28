@@ -146,10 +146,10 @@ int extractControlArt(const UnityResources &unity, const Regions &regions, const
     require(count > 0 && count <= 1024, "Invalid control sprite count");
     std::unordered_map<uint32_t, Image> sprites;
     std::list<std::pair<std::string, Image>> atlases;
-    const auto sprite = [&](uint32_t hash) -> const Image & {
-        if (const auto cached = sprites.find(hash); cached != sprites.end()) return cached->second;
+    const auto sprite = [&](uint32_t hash) -> const Image * {
+        if (const auto cached = sprites.find(hash); cached != sprites.end()) return &cached->second;
         const auto found = regions.find(hash);
-        require(found != regions.end(), "Missing mobile UI sprite");
+        if (found == regions.end()) return nullptr;
         const Region *chosen = nullptr;
         for (const auto &region : found->second) {
             if (!region.sheet.starts_with(uiAtlas) || region.sheet.size() == uiAtlas.size() ||
@@ -157,15 +157,16 @@ int extractControlArt(const UnityResources &unity, const Regions &regions, const
             require(!chosen, "Ambiguous mobile UI sprite");
             chosen = &region;
         }
-        require(chosen, "Missing high-resolution mobile UI sprite");
+        if (!chosen) return nullptr;
         auto atlas = std::ranges::find_if(atlases, [&](const auto &item) { return item.first == chosen->sheet; });
         if (atlas == atlases.end()) {
             if (atlases.size() == 3) atlases.pop_back();
             atlases.emplace_front(chosen->sheet, loadAtlas(unity, chosen->sheet));
         } else atlases.splice(atlases.begin(), atlases, atlas);
-        return sprites.emplace(hash, unpackSprite(atlases.front().second, *chosen)).first->second;
+        return &sprites.emplace(hash, unpackSprite(atlases.front().second, *chosen)).first->second;
     };
 
+    int extracted = 0;
     for (int i = 0; i < count; ++i) {
         const auto name = reader.string();
         const auto slash = name.find('/');
@@ -178,18 +179,30 @@ int extractControlArt(const UnityResources &unity, const Regions &regions, const
             const auto layers = reader.read<uint8_t>();
             require(layers > 0 && layers <= 16, "Invalid control sprite layers");
             std::unique_ptr<Image> image;
+            bool missingLayer = false;
             for (int l = 0; l < layers; ++l) {
                 const auto hash = reader.read<uint32_t>();
                 const auto box = coordinates<4>(reader);
                 const auto [frameWidth, frameHeight] = coordinates<2>(reader);
                 const auto [x, y] = coordinates<2>(reader);
-                auto layer = frame(crop(sprite(hash), box), frameWidth, frameHeight);
+                if (missingLayer) continue;
+                const auto *source = sprite(hash);
+                if (!source) {
+                    missingLayer = true;
+                    continue;
+                }
+                auto layer = frame(crop(*source, box), frameWidth, frameHeight);
                 if (layers == 1 && !width && !height) image = std::make_unique<Image>(std::move(layer));
                 else {
                     if (!image) image = std::make_unique<Image>(width ? width : layer.width, height ? height : layer.height);
                     composite(*image, layer, x == -1 ? (image->width - layer.width) / 2 : x,
                         y == -1 ? (image->height - layer.height) / 2 : y);
                 }
+            }
+            if (missingLayer) {
+                // The launcher can fill this recipe with its own drawing.
+                if (flags & 2) reader.take(8);
+                continue;
             }
             if (flags & 1) {
                 for (int y = 0; y < image->height / 2; ++y)
@@ -201,11 +214,12 @@ int extractControlArt(const UnityResources &unity, const Regions &regions, const
             if (flags & 4) *image = outline(*image);
             if (flags & 8) iris(*image);
             writeRawImage(output / (name + ".rawimg"), std::move(*image));
+            ++extracted;
         } catch (const std::exception &failure) {
             throw std::runtime_error(name + ": " + failure.what());
         }
     }
     require(reader.pos == reader.bytes.size(), "Trailing control sprite recipe data");
-    return count;
+    return extracted;
 }
 }

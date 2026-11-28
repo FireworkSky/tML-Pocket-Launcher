@@ -1,6 +1,6 @@
 namespace MobileLauncher.Bootstrap.Compatibility;
 
-/// <summary>Only a successful presentation may dismiss the startup surface.</summary>
+/// <summary>Dismiss the startup surface after the first successful presentation.</summary>
 public sealed class FirstFrameSignal(Action notify)
 {
     private int signaled;
@@ -8,7 +8,8 @@ public sealed class FirstFrameSignal(Action notify)
     public object? AfterPresent(Func<object?> present)
     {
         var result = present();
-        if (Interlocked.CompareExchange(ref signaled, 1, 0) == 0)
+        if (Volatile.Read(ref signaled) == 0 &&
+            Interlocked.CompareExchange(ref signaled, 1, 0) == 0)
         {
             try { notify(); }
             catch (Exception error)

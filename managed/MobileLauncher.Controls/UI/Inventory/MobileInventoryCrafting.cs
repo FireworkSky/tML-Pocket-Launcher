@@ -61,7 +61,10 @@ public partial class MobileInventorySystem
 
 	private void DrawCrafting()
 	{
-		DrawGuideMode();
+		if (guideSession) {
+			DrawGuideMode();
+			if (!guideSession) return;
+		}
 		if (!itemDetailsSource.HasValue) ReadRecipeDetailsPointer();
 		if (!MobileInventoryNative.CanCraft) {
 			Text(T("CraftingIsProvidedByTheNativeInterface"), layout.CraftAt(54, 204, 250, 44), .7f);

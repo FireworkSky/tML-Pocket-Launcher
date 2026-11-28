@@ -8,6 +8,7 @@ import { useSteam } from './steam/state';
 import { useNativeFileBrowser } from './files';
 import { NativeVersionManager } from './versions';
 import { NativeAcquireAction } from './controls';
+import { NativeInstances, NativeSaveBackups } from './instances';
 
 export function useNativeActions(launcher: LauncherContextValue) {
   const { t } = useTranslation();
@@ -129,7 +130,7 @@ export function useNativeActions(launcher: LauncherContextValue) {
             onClick={() => openWorkspace('resource-mods')}
           />
           <NativeAcquireAction
-            title={t('导入 .tmod')}
+            title={t('导入游戏模组')}
             description={t('选择本地模组文件，支持多选')}
             symbol="folder"
             onClick={() => importInfo('mod')}
@@ -137,12 +138,10 @@ export function useNativeActions(launcher: LauncherContextValue) {
         </div>
       ),
     });
-  const instances = () =>
+  const installedVersions = () =>
     openDialog({
       title: t('已安装版本'),
-      description: t(
-        '不同 tML 版本独立安装。选择下次启动版本，或卸载指定版本。存档、模组与 Terraria 资源共用并保留。',
-      ),
+      description: t('为当前实例选择启动版本。已安装的 tML 发行文件由各实例共用。'),
       body: <NativeVersionManager />,
       actions: (
         <>
@@ -150,6 +149,14 @@ export function useNativeActions(launcher: LauncherContextValue) {
           <Button onClick={() => importInfo('tml')}>{t('导入 ZIP')}</Button>
         </>
       ),
+      drawer: true,
+    });
+  const instances = () =>
+    openDialog({
+      title: t('游戏实例'),
+      description: t('每个实例独立保存角色、世界、模组和启动设置，共用已安装的游戏资源。'),
+      body: <NativeInstances />,
+      actions: <Button onClick={installedVersions}>{t('管理已安装版本')}</Button>,
       drawer: true,
     });
   const environment = () => {
@@ -171,10 +178,17 @@ export function useNativeActions(launcher: LauncherContextValue) {
         body: <NativeLogs />,
         drawer: true,
       });
+    else if (id === 'save-backups')
+      openDialog({
+        title: t('存档备份'),
+        description: t('备份或恢复当前实例中的角色和世界。'),
+        body: <NativeSaveBackups />,
+        drawer: true,
+      });
     else if (['storage-paths', 'mod-folder', 'cache'].includes(id))
       openDialog({
         title: id === 'cache' ? t('缓存管理') : t('数据目录'),
-        description: t('数据保存在应用专用目录，重新安装游戏发行包不会删除模组和存档。'),
+        description: t('查看游戏资源、存档和模组的位置。'),
         body: <NativeStorage clear={id === 'cache'} />,
         drawer: true,
       });
@@ -216,10 +230,12 @@ export function useNativeActions(launcher: LauncherContextValue) {
     notice,
     tasks,
     versions,
+    importFile,
     importInfo,
     accounts,
     addMods,
     instances,
+    installedVersions,
     environment,
     showInfo,
     launch: () => run('launch'),
@@ -267,10 +283,19 @@ function NativeLogs() {
       >
         {t('分享日志')}
       </Button>
+      <Button onClick={() => void nativeRequest('gameDiagnostics.share')
+        .catch((error: Error) => notify(t(error.message)))}>
+        {t('分享游戏运行诊断包')}
+      </Button>
+      <Button onClick={() => void nativeRequest('crashReport.shareLauncher')
+        .catch((error: Error) => notify(t(error.message)))}>
+        {t('分享启动器诊断包')}
+      </Button>
     </>
   );
 }
 const STORAGE_LABELS: Readonly<Record<string, string>> = {
+  sharedRoot: '共享游戏目录',
   games: '发行包',
   userdata: '用户数据',
   mods: '模组',
@@ -281,27 +306,79 @@ const STORAGE_LABELS: Readonly<Record<string, string>> = {
 
 function NativeStorage({ clear }: { clear: boolean }) {
   const { t } = useTranslation();
-  const [data, setData] = useState<Record<string, string | number>>({});
+  const { nativeState } = useLauncher();
+  const [data, setData] = useState<Record<string, string | number | boolean>>({});
   const [error, setError] = useState('');
-  const read = (method = 'storage') =>
-    void nativeRequest<Record<string, string | number>>(method)
+  const read = (method = 'storage') => {
+    setError('');
+    void nativeRequest<Record<string, string | number | boolean>>(method)
       .then(setData)
       .catch((failure: Error) => setError(failure.message));
+  };
   useEffect(() => {
     read();
+    const refresh = () => read();
+    window.addEventListener('launcher:files-resume', refresh);
+    return () => window.removeEventListener('launcher:files-resume', refresh);
   }, []);
   return (
     <>
-      <dl className="detail-list">
-        {Object.entries(data).map(([key, value]) => (
-          <div key={key}>
-            <dt>{Object.hasOwn(STORAGE_LABELS, key) ? t(STORAGE_LABELS[key]) : key}</dt>
-            <dd>{typeof value === 'number' ? `${(value / 1048576).toFixed(1)} MB` : value}</dd>
-          </div>
-        ))}
+      <dl className="detail-list storage-detail-list">
+        {Object.entries(data)
+          .filter(([key]) => Object.hasOwn(STORAGE_LABELS, key))
+          .map(([key, value]) => (
+            <div key={key}>
+              <dt>{t(STORAGE_LABELS[key])}</dt>
+              <dd>
+                {['games', 'userdata', 'mods'].includes(key) || (key === 'sharedRoot' && data.sharedExists) ? (
+                  <button
+                    type="button"
+                    className="storage-folder-link"
+                    aria-label={t('打开{folder}', { folder: t(STORAGE_LABELS[key]) })}
+                    onClick={() => {
+                      setError('');
+                      void nativeRequest('storage.openFolder', { folder: key }).catch((failure: Error) =>
+                        setError(failure.message),
+                      );
+                    }}
+                  >
+                    {String(value)}
+                  </button>
+                ) : typeof value === 'number' ? `${(value / 1048576).toFixed(1)} MB` : String(value)}
+              </dd>
+            </div>
+          ))}
       </dl>
-      {error && <p role="alert">{error}</p>}
-      {clear && <Button onClick={() => read('cache.clear')}>{t('清理下载临时文件')}</Button>}
+      {error && <p role="alert">{t(error)}</p>}
+      {clear ? (
+        <Button onClick={() => read('cache.clear')}>{t('清理下载临时文件')}</Button>
+      ) : (
+        data.sharedRoot && (
+          <>
+            <p>{t('卸载启动器后，共享目录中的存档和模组会保留。游戏资源需要重新导入或下载。')}</p>
+            {data.storageGranted === false ? (
+              <Button
+                onClick={() =>
+                  void nativeRequest('files.permission').catch((failure: Error) =>
+                    setError(failure.message),
+                  )
+                }
+              >
+                {t('授予文件访问权限')}
+              </Button>
+            ) : data.shared ? (
+              <p role="status">{t('已使用共享游戏目录')}</p>
+            ) : (
+              <Button disabled={nativeState?.busy} onClick={() => read('storage.enable')}>
+                {t(data.sharedExists ? '接回已有共享游戏目录' : '使用共享游戏目录')}
+              </Button>
+            )}
+          </>
+        )
+      )}
+      {nativeState?.busy && nativeState.operation === 'storage.enable' && (
+        <p role="status">{t(nativeState.message)}</p>
+      )}
     </>
   );
 }

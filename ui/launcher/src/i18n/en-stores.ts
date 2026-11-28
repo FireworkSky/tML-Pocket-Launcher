@@ -30,7 +30,7 @@ const english: Record<string, string> = {
     'Choose how to add mods. After installation, you can enable or disable them under Installed.',
   下载模组: 'Download mods',
   '进入 Steam 创意工坊下载中心': 'Browse downloads in the Steam Workshop',
-  '导入 .tmod': 'Import .tmod',
+  '导入游戏模组': 'Import mods',
   '选择本地模组文件，支持多选': 'Select one or more local mod files',
   已安装版本: 'Installed versions',
   '不同 tML 版本独立安装。选择下次启动版本，或卸载指定版本。存档、模组与 Terraria 资源共用并保留。':
@@ -76,6 +76,24 @@ const english: Record<string, string> = {
   分享日志: 'Share logs',
   发行包: 'Release packages',
   用户数据: 'User data',
+  '查看游戏资源、存档和模组的位置。': 'View the locations of game assets, saves, and mods.',
+  共享游戏目录: 'Shared game folder',
+  使用共享游戏目录: 'Use shared game folder',
+  '授予文件访问权限后，将自动创建共享游戏目录和模组文件夹。':
+    'Grant file access to automatically create the shared game and mods folders.',
+  接回已有共享游戏目录: 'Reconnect existing shared game folder',
+  已使用共享游戏目录: 'Using the shared game folder',
+  '卸载启动器后，共享目录中的存档和模组会保留。游戏资源需要重新导入或下载。':
+    'Saves and mods in shared storage survive launcher uninstall. Import or download the game assets again after reinstalling.',
+  '正在准备共享游戏目录…': 'Preparing the shared game folder…',
+  '共享游戏目录不可访问，请恢复文件访问权限。':
+    'Restore file access to use the shared game folder.',
+  '共享游戏目录不可用，请检查存储。': 'The shared game folder is unavailable. Check your storage.',
+  '共享游戏目录已存在，但不是启动器创建的目录。': 'A folder already occupies the shared game path.',
+  '共享游戏目录已存在，请重试。': 'The shared game folder already exists. Try again.',
+  '无法保存游戏存储设置。': 'Could not save the game storage setting.',
+  '游戏目录包含不支持的文件。': 'The game folder contains an unsupported file.',
+  '游戏文件复制不完整。': 'A game file could not be copied completely.',
   模组: 'Mods',
   下载缓存: 'Download cache',
   可用空间: 'Available space',
@@ -221,6 +239,7 @@ const english: Record<string, string> = {
 
   '正在处理…': 'Working…',
   '{store}：下载资源 {done}/{total} MB': '{store}: Downloading assets {done}/{total} MB',
+  'Steam：已处理 {done}/{total} MiB · 已校验 {files}/{count} 个文件': 'Steam: Processed {done}/{total} MiB · {files}/{count} files verified',
   'Steam：读取资源清单 {id}': 'Steam: Reading asset manifest {id}',
   'Steam：校验完成，正在准备安装…': 'Steam: Verification complete. Preparing installation…',
   'GOG：正在提取游戏资源…': 'GOG: Extracting game assets…',

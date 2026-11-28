@@ -72,7 +72,7 @@ internal object PackageVersionReader {
                 )
                     tmlVersion(detected) ?: UNKNOWN_TML
                 else recorded.ifBlank { detected }
-            PackageKind.TERRARIA ->
+            PackageKind.TERRARIA, PackageKind.TERRARIA_STEAM, PackageKind.TERRARIA_GOG ->
                 terrariaVersion(detected) ?: terrariaVersion(recorded) ?: UNKNOWN_TERRARIA
             PackageKind.MOBILE_TERRARIA -> recorded
         }

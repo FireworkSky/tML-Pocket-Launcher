@@ -565,13 +565,8 @@ UI: {
 	PlaceGuideQueryItem: 将物品放入向导查询格，查看以它为材料的配方。
 	SwitchToCrafting: 查询 → 切换到制作
 	SwitchToGuideQuery: 制作 → 切换到向导查询
-	RalDefaultAppearance: RAL 默认（代码绘制）
 	PackNextSources: 下一页来源文件
-	LauncherFieldmultitouch: 允许多控件同时触摸
 	PackUnboundKey: "{0} 在客户端当前按键设置中没有绑定操作。"
-	LauncherGroupGeneral: 布局与外观（点击切换）
-	LauncherGroupBindings: 按键与扇区（点击切换）
-	LauncherGroupTextures: 纹理图层（点击切换）
 	LauncherRecordKey: 录入键盘按键
 	LauncherPressKey: 请按下键盘按键…
 	LauncherLayerNormal: 普通
@@ -595,85 +590,11 @@ UI: {
 	PackPreview: 检查兼容性
 	PackReport: 查看兼容性报告
 	PackImportReplace: 替换所选预设并启用
-	PackSummary: "{0} 个控件，{1} 张贴图，{2} 项提示"
+	PackSummary: "{0} 个控件，{1} 项提示"
 	PackImported: 已导入预设 {0}
 	PackFailed: 控件包操作失败
 	PackPassThroughWarning: 已关闭向游戏世界传递触摸，避免同时触发操作。
-	PackOpenAssets: 打开 PNG 文件夹
-	LauncherAdvancedProperties: 高级控件属性
-	LauncherPolygonPoints: 编辑多边形顶点
-	LauncherDuplicate: 复制控件
-	LauncherPropertyHint: 输入属性值；箭头切换选项。PNG 路径来自原控件包或 UserAssets 文件夹。
-	LauncherUnsupportedKey: 不支持的按键，请使用 KEYBOARD_*、ACTION_* 或 TRIGGER_*。
-	LauncherInvalidPosition: X 和 Y 必须在 0 到 1 之间。
-	LauncherKindDPad: 十字键
-	LauncherKindTouchpad: 触控板
-	LauncherKindMousewheel: 滚轮
-	LauncherKindText: 文本
 	Save: 保存
-	LauncherFieldtype: 控件类型
-	LauncherFieldname: 名称
-	LauncherFieldwidth: 宽度 / 屏幕高度
-	LauncherFieldheight: 高度 / 屏幕高度
-	LauncherFieldx: X / 屏幕宽度
-	LauncherFieldy: Y / 屏幕高度
-	LauncherFieldrotation: 旋转角度
-	LauncherFieldopacity: 透明度
-	LauncherFieldborderOpacity: 边框透明度
-	LauncherFieldtextOpacity: 文字透明度
-	LauncherFieldbgColor: 背景 ARGB
-	LauncherFieldtextColor: 文字 ARGB
-	LauncherFieldstrokeColor: 边框 ARGB
-	LauncherFieldstrokeWidth: 边框宽度
-	LauncherFieldcornerRadius: 圆角半径
-	LauncherFieldisVisible: 显示控件
-	LauncherFieldisPassThrough: 触摸穿透
-	LauncherFieldisSizeRatioLocked: 锁定宽高比
-	LauncherFieldmode: 输入模式
-	LauncherFieldkeycode: 按键绑定
-	LauncherFieldisToggle: 切换按钮
-	LauncherFieldshape: 形状
-	LauncherFielduseTextureAlphaHitTest: 按 PNG 透明度判定点击
-	LauncherFieldstickKnobSize: 摇杆头大小比例
-	LauncherFieldstickOpacity: 摇杆头透明度
-	LauncherFieldjoystickKeys: 上 / 右 / 下 / 左按键
-	LauncherFieldupKeycode: 上方向按键
-	LauncherFieldrightKeycode: 右方向按键
-	LauncherFielddownKeycode: 下方向按键
-	LauncherFieldleftKeycode: 左方向按键
-	LauncherFieldstyle: 十字键样式
-	LauncherFieldbuttonSpacing: 方向键间距
-	LauncherFieldbuttonSize: 方向键大小
-	LauncherFielddeadZone: 中心死区
-	LauncherFieldallowDiagonal: 允许斜向
-	LauncherFieldactiveColor: 激活 ARGB
-	LauncherFieldshowLabels: 显示方向标签
-	LauncherFieldsectorCount: 扇区数量（4–12）
-	LauncherFieldexpandedScale: 展开倍率
-	LauncherFielddeadZoneRatio: 中心死区比例
-	LauncherFieldexpandDuration: 展开时长（毫秒）
-	LauncherFieldshowDividers: 显示分隔线
-	LauncherFielddividerColor: 分隔线 ARGB
-	LauncherFieldselectedColor: 选中 ARGB
-	LauncherFieldlabel: 扇区文字
-	LauncherFieldiconPath: 扇区 PNG 图标
-	LauncherFielddisplayText: 显示文本
-	LauncherFieldisDoubleClickSimulateJoystick: 双击模拟瞄准拖动
-	LauncherFieldorientation: 滚轮方向
-	LauncherFieldreverseDirection: 反转方向
-	LauncherFieldscrollSensitivity: 每格滚动所需像素
-	LauncherFieldscrollRatio: 滚动倍率
-	LauncherFieldpath: PNG 路径
-	LauncherFieldenabled: 启用图层
-	LauncherFieldscaleMode: 图像缩放方式
-	LauncherFieldtintColor: 染色 ARGB（0 为关闭）
-	LauncherFieldpadding: 图像内边距比例
-	LauncherFieldflipHorizontal: 水平翻转
-	LauncherFieldflipVertical: 垂直翻转
-	LauncherFieldclipToShape: 裁剪到控件形状
-	LauncherFieldnativeTexture: 内置贴图
-	LauncherFieldholdAction: 持续触发原生操作
-	LauncherFieldpolygonPoints: 多边形顶点 JSON
 	Accessories: 配饰
 	Achievements: 成就
 	Add: 添加
@@ -735,12 +656,9 @@ UI: {
 	Container: 容器
 	ControlOpacity: 按钮不透明度
 	ControlSize: 按钮大小
-	ControlTexturePack: 触控纹理包
 	Controls: 游戏控制
 	CopyToPreset: 复制到方案
 	Corruption: 腐化
-	CouldNotLoadTexturePackCurrentArtworkWasKept: 纹理包加载失败，已保留当前样式。
-	CouldNotOpenTheTexturePackFolder: 无法打开纹理包目录。
 	Craft: 制造
 	Crafting: 制作
 	CraftingArea: 制作区
@@ -872,10 +790,22 @@ UI: {
 	ModKeybind: 模组按键
 	ModKeybinds: 模组按键
 	ModUI: 模组 UI
+	HideLayoutToolbar: 收起工具栏
+	ShowLayoutToolbar: 展开工具栏
 	CalamityDifficulty: 灾厄 · 难度切换
 	CalamityFlightBar: 灾厄 · 剩余飞行
 	ModdedEquipmentExtensionsAreUnavailable: 模组装备扩展暂不可用
 	MouseTouchSimulation: 鼠标模拟触摸
+	ShowMouseCursor: 显示鼠标光标（触控板模式）
+	TogglePointerMode: 切换触屏和鼠标
+	DirectTouchMode: 已切换到触屏模式
+	TrackpadMode: 已切换到鼠标模式
+	ShowKeyboard: 弹出输入法
+	PerformanceDisplay: 性能显示
+	PerformanceMean: 平均帧时间
+	PerformanceWorst: 最慢帧
+	PerformanceResolution: 渲染分辨率
+	PerformanceManagedMemory: 托管堆占用
 	Move: 移动
 	MoveOnly: 仅移动
 	Multiplayer: 多人模式
@@ -887,6 +817,10 @@ UI: {
 	NewPlayer: 新玩家
 	NewWorld: 新世界
 	NoCompatibleExternalModUIIsAvailable: 当前没有可编辑的外部模组 UI。
+	OpenModPanelForLayoutPreview: 打开模组面板后，可在这里预览它的位置。
+	ModUiConflictLegend: "红色：重叠　紫色：仅预览　蓝色：可编辑"
+	BossChecklistLogButton: Boss Checklist 图鉴按钮
+	NoEditableModUi: 没有可编辑的模组 UI
 	NoCompatibleModUI: 无兼容的模组 UI
 	NoMatchingRecipes: 暂无可制作物品
 	NoModKeybindsAreLoaded: 当前没有已加载的模组按键
@@ -899,13 +833,11 @@ UI: {
 	Opacity: 按钮不透明度
 	OpaqueTooltips: 不透明提示框
 	Open: 打开
-	OpenTexturePackFolder: 打开纹理包目录
 	OpenUse: 打开 / 使用
 	Other: 其他
 	Pants: 裤子
 	Parallax: 背景视差
 	Password: 密码：
-	PlaceZipTexturePacksHereThenSelectTheControlTexturePackAbove: 将 .zip 纹理包放入此目录后，再点击上方触控纹理包切换：
 	PlacementPreview: 方块放置预览
 	Play: 开始游戏
 	Port: 端口：
@@ -982,8 +914,6 @@ UI: {
 	TargetLockMode: 锁定目标方式
 	Team: 队伍
 	Texture: 纹理
-	TexturePackFailedToLoadDetailsWereWrittenToTheClientLog: 纹理包加载失败，详细原因已写入客户端日志。
-	TheActiveTexturePackHasNoAvailableTextures: 当前纹理包没有可用纹理。
 	TheHostLauncherIsUnavailableInThisVersion: 无法调用当前版本的主机启动接口。
 	Toggle: 切换
 	TogglePvP: 切换 PvP

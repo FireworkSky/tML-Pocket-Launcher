@@ -62,9 +62,14 @@ internal sealed class AndroidLogTextWriter(int priority) : TextWriter
     private void Emit()
     {
         if (_line.Length == 0) return;
-        NativeWrite(priority, "tMLPocketCoreClr", _line.ToString().TrimEnd('\r'));
+        var message = _line.ToString().TrimEnd('\r');
+        WriteSessionLog(priority, message);
+        NativeWrite(priority, "tMLPocketCoreClr", message);
         _line.Clear();
     }
+
+    [DllImport("main", EntryPoint = "tml_pocket_managed_log", CallingConvention = CallingConvention.Cdecl)]
+    private static extern void WriteSessionLog(int priority, [MarshalAs(UnmanagedType.LPUTF8Str)] string message);
 
     [DllImport("liblog.so", EntryPoint = "__android_log_write", CallingConvention = CallingConvention.Cdecl)]
     private static extern int NativeWrite(

@@ -22,6 +22,9 @@ object NativeCoreClr {
     external fun nativeSetEnv(name: String, value: String): Int
 
     @JvmStatic
+    external fun nativeStartGameLog(path: String): Boolean
+
+    @JvmStatic
     external fun nativeRegisterBridgeActivity(activity: android.app.Activity)
 
     @JvmStatic

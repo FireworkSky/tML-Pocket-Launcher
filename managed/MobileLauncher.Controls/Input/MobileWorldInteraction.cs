@@ -67,7 +67,7 @@ internal static class MobileWorldInteraction
 		if (!found) { contactId = NoContact; tilePending = directToolPress = false; }
 
 		bool startedContact = false;
-		if (contactId == NoContact) foreach (MobileTouchContact contact in MobileJoystickInput.ActiveContacts) {
+		if (!MobileTrackpad.Enabled && contactId == NoContact) foreach (MobileTouchContact contact in MobileJoystickInput.ActiveContacts) {
 			if (contact.State != TouchLocationState.Pressed || MobileJoystickInput.ContactBelongsToControl(contact)
 				|| contact.Position.X < 0 || contact.Position.Y < 0 || contact.Position.X >= PlayerInput.RealScreenWidth || contact.Position.Y >= PlayerInput.RealScreenHeight
 				|| MobileInventorySystem.BlocksControl(contact.Position) || OverUi(contact.Position)) continue;

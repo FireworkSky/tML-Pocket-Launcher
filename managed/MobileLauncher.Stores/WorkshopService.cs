@@ -55,10 +55,6 @@ internal static class WorkshopService
             filetype = 0,
             return_vote_data = true,
             return_tags = true,
-            return_kv_tags = true,
-            return_previews = true,
-            return_metadata = true,
-            return_children = true,
             return_short_description = true,
             search_text = query.Search?.Trim() ?? ""
         };
@@ -191,11 +187,9 @@ internal static class WorkshopService
         if (key.Result != EResult.OK) throw new IOException($"Steam 工坊资源库访问失败：{key.Result}");
         var code = await content.GetManifestRequestCode(depot, appId, manifestId).WaitAsync(ct);
         if (code == 0) throw new IOException("Steam 未授予工坊清单访问权限");
-        var servers = (await content.GetServersForSteamPipe(client.CellID, 20).WaitAsync(ct))
-            .Where(server => server.Type is "CDN" or "SteamCache" && !server.UseAsProxy)
-            .Take(8).ToArray();
+        var servers = await SteamCdnPool.CreateAsync(client, appId, ct);
         using var cdn = new Client(client);
-        var manifest = await SteamSession.WithServerAsync(servers, content, appId, depot,
+        var manifest = await servers.FetchAsync(depot,
             (server, auth) => cdn.DownloadManifestAsync(depot, manifestId, code, server, key.DepotKey, cdnAuthToken: auth), ct);
         var files = manifest.Files?.Where(file => !file.Flags.HasFlag(EDepotFileFlag.Directory)).ToArray()
             ?? throw new InvalidDataException("Steam 工坊清单没有文件");
@@ -229,7 +223,7 @@ internal static class WorkshopService
                     chunk.UncompressedLength > file.TotalSize - offset)
                     throw new InvalidDataException("工坊文件分块范围无效");
                 var bytes = new byte[chunk.UncompressedLength];
-                var count = await SteamSession.WithServerAsync(servers, content, appId, depot,
+                var count = await servers.FetchAsync(depot,
                     (server, auth) => cdn.DownloadDepotChunkAsync(depot, chunk, server, bytes, key.DepotKey, cdnAuthToken: auth), ct);
                 if (count != bytes.Length) throw new InvalidDataException("工坊文件分块下载不完整");
                 await output.WriteAsync(bytes, ct);

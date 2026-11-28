@@ -75,6 +75,26 @@ public static class StoreFiles
         return full;
     }
 
+    internal static async Task<bool> TryReuseContentAsync(string contentRoot, string relative,
+        string destination, ulong size, byte[] expected, CancellationToken ct)
+    {
+        if (ContentPath(relative) != relative || !relative.StartsWith("Content/", StringComparison.Ordinal)) return false;
+        var suffix = relative["Content/".Length..];
+        if (Path.IsPathRooted(suffix)) return false;
+        var source = new FileInfo(Path.Combine(contentRoot, suffix));
+        try
+        {
+            if (!source.Exists || (ulong)source.Length != size) return false;
+            await using var input = source.OpenRead();
+            await using var output = File.Create(destination);
+            await input.CopyToAsync(output, ct);
+        }
+        catch (FileNotFoundException) { return false; }
+        catch (DirectoryNotFoundException) { return false; }
+        await using var copy = File.OpenRead(destination);
+        return CryptographicOperations.FixedTimeEquals(await SHA1.HashDataAsync(copy, ct), expected);
+    }
+
     public static async Task VerifySha1Async(string file, byte[] expected, CancellationToken ct)
     {
         await using var input = File.OpenRead(file);
